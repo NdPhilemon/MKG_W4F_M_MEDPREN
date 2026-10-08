@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v19 — Correctif erreur & stabilité</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v21 — Correctif publicités</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -167,11 +167,6 @@ body.admin-impersonating .masterbar{display:flex}
     <button class="icon" id="bellBtn">🔔<span id="notifBadge" class="badge">0</span></button>
   </div>
 </header>
-
-
-<div id="appError" style="display:none;position:fixed;left:10px;right:10px;top:80px;z-index:9999;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:12px;border-radius:12px;font-family:system-ui">
-  Une erreur de l'application a été détectée. Rechargez la page ou réinstallez la dernière version.
-</div>
 
 
 <div id="globalAdPanel" class="adPanel">
@@ -589,7 +584,7 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v19";
+const STORAGE_KEY="mkg-full-v21";
 let memoryStore=null;
 function storageGet(){
   try{
@@ -628,7 +623,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v19"&&e.newValue){
+  if(e.key==="mkg-full-v21"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
@@ -1506,21 +1501,76 @@ document.addEventListener("click",e=>{
   b.textContent=input.type==="password"?"👁":"🙈";
 });
 
+
+let adTimer=null,adIndex=0;
+function renderAds(){
+  const stage=$("#adStage"),dots=$("#adDots");
+  if(!stage||!dots)return;
+  const active=(db.ads||[]).filter(a=>a.active!==false);
+  if(adTimer){clearInterval(adTimer);adTimer=null}
+  if(!active.length){
+    stage.innerHTML='<div class="adEmpty">Aucune publicité active.</div>';
+    dots.innerHTML='';
+    return
+  }
+  if(adIndex>=active.length)adIndex=0;
+  stage.innerHTML=active.map((a,i)=>`<div class="adSlide ${i===adIndex?"active":""}"><img src="${a.image}" alt="Publicité">${a.text?`<div class="adCaption">${esc(a.text)}</div>`:""}</div>`).join("");
+  dots.innerHTML=active.map((_,i)=>`<span class="adDot ${i===adIndex?"active":""}"></span>`).join("");
+  if(active.length>1){
+    adTimer=setInterval(()=>{
+      adIndex=(adIndex+1)%active.length;
+      const slides=$$("#adStage .adSlide"),ds=$$("#adDots .adDot");
+      slides.forEach((el,i)=>el.classList.toggle("active",i===adIndex));
+      ds.forEach((el,i)=>el.classList.toggle("active",i===adIndex));
+    },5000)
+  }
+}
+function renderAdAdmin(){
+  const box=$("#adAdminList");
+  if(!box)return;
+  box.innerHTML=(db.ads||[]).map(a=>`<div class="adAdminCard">${a.image?`<img src="${a.image}" alt="Publicité">`:""}<p>${esc(a.text||"Sans texte")}</p><div class="row"><button class="btn alt small" onclick="toggleAd('${a.id}')">${a.active===false?"Activer":"Masquer"}</button><button class="btn danger small" onclick="deleteAd('${a.id}')">Supprimer</button></div></div>`).join("")||'<div class="muted">Aucune publicité.</div>'
+}
+if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
+  if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
+  const f=$("#adImageInput").files[0];
+  if(!f)return alert("Choisissez une image publicitaire.");
+  if(!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
+  const image=await new Promise((resolve,reject)=>{
+    const rd=new FileReader();
+    rd.onload=()=>resolve(rd.result);
+    rd.onerror=()=>reject(new Error("Lecture image impossible"));
+    rd.readAsDataURL(f)
+  });
+  db.ads.push({id:uid("ad"),image,text:$("#adTextInput").value.trim(),active:true,createdAt:new Date().toISOString()});
+  $("#adImageInput").value="";$("#adTextInput").value="";
+  queueSync("ad.create",{});save();renderAds();renderAdAdmin()
+};
+window.toggleAd=id=>{
+  if(!isTrueAdmin())return;
+  const a=db.ads.find(x=>x.id===id);if(!a)return;
+  a.active=a.active===false;
+  queueSync("ad.toggle",{adId:id,active:a.active});save();renderAds();renderAdAdmin()
+};
+window.deleteAd=id=>{
+  if(!isTrueAdmin())return;
+  if(!confirm("Supprimer cette publicité ?"))return;
+  db.ads=db.ads.filter(x=>x.id!==id);
+  queueSync("ad.delete",{adId:id});save();renderAds();renderAdAdmin()
+};
+
 if("serviceWorker" in navigator){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  window.addEventListener("load",async()=>{
+    try{
+      const reg=await navigator.serviceWorker.register("./sw.js");
+      await reg.update();
+    }catch(e){console.warn("Service worker:",e)}
+  });
 }
 try{
   render();
   routeFromHash();
-  const e=document.getElementById("appError");
-  if(e)e.style.display="none";
 }catch(err){
   console.error("Erreur initialisation MKG-W4F:",err);
-  const e=document.getElementById("appError");
-  if(e){
-    e.style.display="block";
-    e.textContent="Une erreur de démarrage a été détectée. Rechargez la page après avoir remplacé tous les fichiers par la dernière version.";
-  }
 }
 </script>
 </body></html>
