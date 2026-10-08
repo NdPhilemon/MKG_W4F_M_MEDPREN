@@ -1,0 +1,1234 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v8 — Accès par rôles & hors connexion</title>
+<style>
+:root{
+  --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
+  --orange:#ff954f;--orangeDark:#934714;--soft:#fff0e5;--nav:#fff;
+  --danger:#b91c1c;--ok:#166534;--warn:#b45309;--shadow:0 8px 28px rgba(0,0,0,.055)
+}
+body.dark{
+  --bg:#0f1115;--card:#171a20;--text:#f4f4f5;--muted:#a1a1aa;--line:#2b3038;
+  --orange:#ffa162;--orangeDark:#ffb17a;--soft:#2c211b;--nav:#171a20;
+  --danger:#f87171;--ok:#86efac;--warn:#fbbf24;--shadow:0 10px 32px rgba(0,0,0,.3)
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding-bottom:88px}
+button,input,select,textarea{font:inherit}button{cursor:pointer}
+header{position:sticky;top:0;z-index:30;height:72px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 18px}
+.brand{font-weight:900;font-size:17px;white-space:nowrap}.top{margin-left:auto;display:flex;gap:8px;align-items:center}
+.icon,.select,.input{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:13px}
+.icon{width:42px;height:42px;position:relative}.select{padding:10px 12px;max-width:175px}.input{padding:11px 12px}
+.badge{position:absolute;right:-4px;top:-4px;background:#ef4444;color:#fff;border-radius:999px;min-width:18px;height:18px;font-size:10px;display:grid;place-items:center;padding:0 5px}
+main{max-width:1220px;margin:auto;padding:28px 18px}
+.eyebrow{font-weight:900;color:var(--orangeDark);letter-spacing:.8px;text-transform:uppercase}
+.title{font-size:42px;line-height:1.05;margin:12px 0}.sub{font-size:18px;color:var(--muted);margin:0 0 24px}
+.row,.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:210px}
+.btn{border:0;border-radius:16px;padding:13px 18px;font-weight:800;background:var(--orange);color:#191919}.btn.alt{background:var(--card);border:1px solid var(--line);color:var(--text)}.btn.danger{background:var(--danger);color:white}.btn.small{padding:8px 10px;border-radius:11px;font-size:12px}
+.periods{display:flex;gap:4px;background:#edf1f4;border-radius:16px;padding:6px;overflow:auto}.dark .periods{background:#222831}
+.periods button{border:0;background:transparent;color:var(--muted);font-weight:800;border-radius:11px;padding:10px 14px;white-space:nowrap}.periods button.active{background:var(--card);color:var(--orangeDark);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.sectionHead{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:30px 0 14px}.sectionHead h2{margin:0;font-size:20px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card,.box{background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow)}.card{border-top:4px solid var(--orange);padding:19px}.box{padding:18px;margin-top:16px;overflow:auto}
+.metric{font-size:29px;font-weight:900;margin:24px 0 7px}.muted{color:var(--muted)}.hint{font-size:13px;color:var(--muted)}.tiny{font-size:11px;color:var(--muted)}
+.panel{display:none}.panel.active{display:block}
+table{width:100%;border-collapse:collapse}th,td{padding:12px 9px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:middle}th{color:var(--muted);font-weight:800}.nowrap{white-space:nowrap}
+tfoot td{font-weight:900;background:var(--soft);color:var(--text)}
+.pill{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:11px;font-weight:800}.pill.red{color:var(--danger)}.pill.green{color:var(--ok)}.pill.warn{color:var(--warn)}
+.product{display:flex;align-items:center;gap:10px}.thumb{width:48px;height:48px;border-radius:13px;border:1px solid var(--line);background:var(--soft);object-fit:cover;display:grid;place-items:center}
+.shopgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.notifs{position:fixed;right:14px;top:68px;z-index:70;width:min(410px,94vw);max-height:72vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:none}.notifs.open{display:block}.notif{padding:14px 16px;border-bottom:1px solid var(--line)}.notif:last-child{border:0}.notif small{color:var(--muted)}
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--nav);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));padding:7px 7px calc(7px + env(safe-area-inset-bottom))}
+.nav{border:0;background:transparent;color:var(--muted);border-radius:14px;padding:8px 4px;font-weight:750;font-size:11px}.nav b{display:block;font-size:19px;margin-bottom:4px}.nav.active{background:var(--soft);color:var(--orangeDark)}
+.modal{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}.modal.open{display:flex}.sheet{width:min(100%,800px);max-height:92vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px}.sheet h2{margin-top:0}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted);font-weight:700}.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:13px;padding:12px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+.receipt{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;max-width:370px;margin:auto;background:white;color:#000;padding:18px;border:1px dashed #aaa}.receipt hr{border:0;border-top:1px dashed #999}.receipt .c{text-align:center}.receipt .r{display:flex;justify-content:space-between;gap:12px}.barcode{font-family:monospace;letter-spacing:-1px;font-size:18px;text-align:center;overflow:hidden}
+.notice{padding:12px 14px;background:var(--soft);border-radius:14px;color:var(--orangeDark);font-size:13px}
+.money.hidden .real{display:none}.money:not(.hidden) .dots{display:none}.money.hidden{letter-spacing:3px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px}.kpi{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:14px}.kpi b{display:block;font-size:20px;margin-top:5px}
+.convgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.conv{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:13px}.conv b{display:block;font-size:17px;margin-top:4px}.positive{color:var(--ok);font-weight:900}
+.role{padding:6px 10px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:12px;font-weight:900}
+.print-only{display:none}
+@media(max-width:900px){.grid4,.convgrid{grid-template-columns:repeat(2,1fr)}.shopgrid{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){header{padding:0 10px}.brand{font-size:14px}.select{max-width:115px}.title{font-size:33px}.grid{grid-template-columns:1fr 1fr}.metric{font-size:24px}.sectionHead{align-items:flex-start;flex-direction:column}.shopgrid{grid-template-columns:1fr}.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.nav{font-size:9px}.nav b{font-size:18px}.convgrid{grid-template-columns:1fr 1fr}}
+@media print{
+  body *{visibility:hidden!important}#printArea,#printArea *{visibility:visible!important}#printArea{display:block!important;position:absolute;left:0;top:0;width:100%;background:#fff;color:#000}#receiptPrint{width:80mm;margin:0;padding:4mm}
+}
+
+.storegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.storeitem{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:13px;box-shadow:var(--shadow)}
+.storeitem img,.storeph{width:100%;aspect-ratio:1.25;object-fit:cover;border-radius:16px;background:var(--soft);display:grid;place-items:center;font-size:40px}
+.storeitem h3{margin:10px 0 4px}.price{font-size:20px;font-weight:900;color:var(--orangeDark)}
+.cartbar{position:sticky;bottom:88px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:13px;box-shadow:var(--shadow);z-index:15}
+.ordergrid{display:grid;grid-template-columns:360px 1fr;gap:14px}
+.orderlist{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:auto;max-height:68vh}
+.ordercard{padding:13px;border-bottom:1px solid var(--line);cursor:pointer}.ordercard:hover,.ordercard.active{background:var(--soft)}
+.chatbox{background:var(--card);border:1px solid var(--line);border-radius:20px;display:flex;flex-direction:column;min-height:520px;overflow:hidden}
+.chathead{padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.chatmessages{flex:1;padding:14px;overflow:auto;max-height:58vh;display:flex;flex-direction:column;gap:9px}
+.bubble{max-width:78%;padding:10px 12px;border-radius:15px;background:var(--bg);border:1px solid var(--line)}
+.bubble.mine{align-self:flex-end;background:var(--soft)}.bubble small{display:block;color:var(--muted);margin-top:4px}
+.chatcomposer{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}.chatcomposer input{flex:1}
+.orderstatus{font-size:11px;font-weight:900;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--orangeDark)}
+.visitorbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media(max-width:900px){.storegrid{grid-template-columns:repeat(2,1fr)}.ordergrid{grid-template-columns:1fr}.orderlist{max-height:300px}.chatbox{min-height:460px}}
+@media(max-width:600px){.storegrid{grid-template-columns:1fr 1fr}.storeitem{padding:9px}.storeitem h3{font-size:14px}.price{font-size:17px}}
+
+
+/* Séparation stricte des espaces */
+body.visitor-mode .internalOnly,
+body.visitor-mode .adminOnly,
+body.visitor-mode .ownerAdminOnly,
+body.visitor-mode #home,
+body.visitor-mode #sales,
+body.visitor-mode #products,
+body.visitor-mode #staff,
+body.visitor-mode #shops,
+body.visitor-mode #reports,
+body.visitor-mode #settings,
+body.visitor-mode #orders,
+body.visitor-mode #shopSelect,
+body.visitor-mode #settingsQuickBtn,
+body.visitor-mode #ordersQuickBtn,
+body.visitor-mode #bellBtn {
+  display:none !important;
+}
+body.internal-mode .visitorOnly {
+  display:none !important;
+}
+body.visitor-mode .bottom{
+  grid-template-columns:repeat(2,1fr) !important;
+}
+body.visitor-mode header .top{
+  margin-left:auto;
+}
+body.visitor-mode #roleBadge{
+  pointer-events:auto;
+}
+
+
+.publicTopActions{display:flex;gap:8px;align-items:center}
+.netbadge{padding:6px 9px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:11px;font-weight:900;white-space:nowrap}
+.netbadge.offline{background:#fee2e2;color:#991b1b}
+.syncbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.permissionGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.permissionItem{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.accessCode{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:900;letter-spacing:2px;padding:10px 12px;border-radius:12px;background:var(--soft);display:inline-block}
+.masterbar{position:fixed;right:12px;bottom:92px;z-index:55;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:9px 11px;box-shadow:var(--shadow);display:none}
+body.admin-impersonating .masterbar{display:flex}
+.publicHero{display:grid;grid-template-columns:1.3fr .7fr;gap:18px;align-items:center;margin-bottom:18px}
+.publicHero .heroCard{background:linear-gradient(135deg,var(--soft),var(--card));border:1px solid var(--line);border-radius:26px;padding:22px}
+.codeRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:720px){.publicHero{grid-template-columns:1fr}.permissionGrid{grid-template-columns:1fr}.netbadge span{display:none}}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">MKG-W4F M'MEDPREN</div>
+  <div class="top">
+    <span id="networkBadge" class="netbadge">● En ligne</span>
+    <button id="roleBadge" class="role" style="border:0;cursor:pointer">Visiteur</button>
+    <select id="shopSelect" class="select"></select>
+    <button class="icon ownerAdminOnly" id="settingsQuickBtn" title="Réglages administrateur">⚙️</button>
+    <button class="icon internalOnly" id="ordersQuickBtn" title="Commandes visiteurs">💬</button>
+    <button class="icon" id="accountBtn" title="Se connecter">👤</button>
+    <button class="icon" id="themeBtn">🌙</button>
+    <button class="icon" id="bellBtn">🔔<span id="notifBadge" class="badge">0</span></button>
+  </div>
+</header>
+
+<main>
+<section id="home" class="panel active">
+  <div class="eyebrow">MUNDU KU GUNDI WORK4FUTURE M'MEDPREN</div>
+  <h1 class="title">Tableau de bord</h1>
+  <p class="sub">Votre activité · conversions USD/CDF basées sur le taux administrateur.</p>
+  <div class="row">
+    <button class="btn" id="newSaleBtn">＋ Nouvelle vente</button>
+    <button class="btn alt" id="moneyBtn">👁 Afficher les montants</button>
+    <button class="btn alt adminOnly" id="exportDashboardBtn">⇩ Excel</button>
+    <button class="btn alt adminOnly" id="printDashboardBtn">⇩ PDF / Imprimer</button>
+  </div>
+
+  <div class="box adminOnly">
+    <div class="sectionHead" style="margin:0 0 10px"><h2>Conversions au taux actuel</h2><span class="pill" id="ratePill"></span></div>
+    <div class="convgrid">
+      <div class="conv"><span class="muted">1 USD</span><b id="c1"></b></div>
+      <div class="conv"><span class="muted">10 USD</span><b id="c10"></b></div>
+      <div class="conv"><span class="muted">50 USD</span><b id="c50"></b></div>
+      <div class="conv"><span class="muted">100 USD</span><b id="c100"></b></div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <input id="quickUsd" class="input" type="number" min="0" step="0.01" placeholder="Montant USD">
+      <span>⇄</span>
+      <input id="quickCdf" class="input" type="number" min="0" step="1" placeholder="Montant CDF">
+      <button class="btn alt small" id="convertBtn">Convertir</button>
+    </div>
+  </div>
+
+  <div class="sectionHead">
+    <h2>🏪 <span id="dashboardShopName">Boutique principale</span></h2>
+    <div id="periods" class="periods"><button data-period="instant">Instantané</button><button data-period="day">Jour</button><button data-period="week" class="active">Semaine</button><button data-period="month">Mois</button><button data-period="year">Année</button><button data-period="custom">Période</button></div>
+  </div>
+  <div id="customPeriod" class="toolbar" style="display:none;margin-bottom:14px"><input id="dashStart" type="date" class="input"><input id="dashEnd" type="date" class="input"><button class="btn small" id="applyDashPeriod">Appliquer</button></div>
+
+  <div class="grid">
+    <div class="card"><div class="muted">Chiffre d’affaires</div><div class="metric money hidden"><span class="dots">••••••</span><span id="revMetric" class="real">$0</span></div><div class="hint" id="revCdfMetric"></div></div>
+    <div class="card adminOnly"><div class="muted">Bénéfice brut</div><div class="metric money hidden"><span class="dots">••••••</span><span id="profitMetric" class="real">$0</span></div><div class="hint" id="profitCdfMetric"></div></div>
+    <div class="card"><div class="muted">Ventes enregistrées</div><div id="salesMetric" class="metric">0</div><div id="itemsMetric" class="muted">0 article vendu</div></div>
+    <div class="card"><div class="muted">Alertes de stock</div><div id="stockMetric" class="metric">0</div><div class="muted">Articles à réapprovisionner</div></div>
+  </div>
+
+  <div class="sectionHead"><h2>Dernières ventes</h2></div>
+  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Articles</th><th>Paiement</th><th>Total</th><th class="adminOnly">Coût achat</th><th class="adminOnly">Bénéfice</th><th>Vendeur</th></tr></thead><tbody id="recentSales"></tbody><tfoot id="recentSalesFoot"></tfoot></table></div>
+</section>
+
+<section id="sales" class="panel">
+  <div class="eyebrow">VENTES</div><h1 class="title">Ventes</h1>
+  <p class="sub">Détail financier complet pour l’administrateur.</p>
+  <div class="row"><button class="btn" id="newSaleBtn2">＋ Nouvelle vente</button><input id="saleSearch" class="input grow" placeholder="Reçu, acheteur, vendeur, article…"></div>
+  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Moyen de paiement</th><th>Total payé</th><th class="adminOnly">Prix d’achat total</th><th class="adminOnly">Prix de vente total</th><th class="adminOnly">Bénéfice</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="salesTable"></tbody><tfoot id="salesFoot"></tfoot></table></div>
+</section>
+
+<section id="products" class="panel">
+  <div class="eyebrow">ARTICLES</div><h1 class="title">Articles</h1>
+  <p class="sub">Prix d’achat, prix de vente, conversions et bénéfices détaillés.</p>
+  <div class="toolbar"><input id="productSearch" class="input grow" placeholder="Rechercher un article…"><select id="categoryFilter" class="input"></select><button class="btn adminOnly" id="addProductBtn">＋ Ajouter</button></div>
+  <div class="box"><table><thead><tr>
+    <th>Article</th><th>Catégorie</th><th>Stock</th>
+    <th class="adminOnly">Achat USD</th><th class="adminOnly">Achat CDF</th>
+    <th>Vente USD</th><th>Vente CDF</th>
+    <th class="adminOnly">Bénéfice/unité USD</th><th class="adminOnly">Bénéfice/unité CDF</th>
+    <th class="adminOnly">Bénéfice potentiel stock</th><th class="adminOnly">Action</th>
+  </tr></thead><tbody id="productsTable"></tbody><tfoot id="productsFoot"></tfoot></table></div>
+</section>
+
+<section id="staff" class="panel">
+  <div class="eyebrow">PERSONNEL & ACCÈS</div><h1 class="title">Personnel</h1>
+  <p class="sub">L’administrateur crée les comptes, génère les codes d’accès, choisit les rôles et paramètre les autorisations de chaque personne.</p>
+  <div class="row ownerAdminOnly"><button class="btn" id="addSellerBtn">＋ Ajouter vendeur</button><button class="btn alt" id="openAccountsBtn">👤 Tester un compte</button></div>
+  <div class="box ownerAdminOnly">
+    <h2 style="margin-top:0">Règle de connexion</h2>
+    <p><b>Administrateur principal :</b> email + mot de passe personnel défini par lui-même.</p>
+    <p><b>Gérant / Vendeur :</b> email autorisé + code d’accès généré par l’administrateur lors de l’autorisation.</p>
+    <div class="notice">L’administrateur peut régénérer un code à tout moment. Un nouveau code invalide automatiquement l’ancien.</div>
+  </div>
+  <div class="box"><table><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Boutiques</th><th>Code d’accès</th><th>Statut</th><th>Suspension</th><th>Actions</th></tr></thead><tbody id="staffTable"></tbody></table></div>
+  <div class="box">
+    <h2 style="margin-top:0">Rôles</h2>
+    <p><b>Vendeur :</b> ventes et reçus uniquement selon les boutiques autorisées. Pas de prix d’achat ni de bénéfices. La correction/annulation directe dépend du délai défini dans les réglages.</p>
+    <p><b>Gérant :</b> accès opérationnel étendu : stocks, rapports, bénéfices, corrections et gestion quotidienne. Il ne peut pas modifier le compte administrateur principal ni les accès du personnel.</p>
+    <p><b>Administrateur :</b> accès complet, y compris la gestion des rôles, suspensions, suppressions et réglages administrateur.</p>
+  </div>
+</section>
+
+<section id="shops" class="panel">
+  <div class="eyebrow">BOUTIQUES</div><h1 class="title">Boutiques</h1>
+  <p class="sub">Une seule boutique existe au départ. L’administrateur peut en ajouter d’autres ici.</p>
+  <button class="btn adminOnly" id="addShopBtn">＋ Ajouter une boutique</button>
+  <div id="shopGrid" class="shopgrid" style="margin-top:16px"></div>
+</section>
+
+<section id="reports" class="panel adminOnly">
+  <div class="eyebrow">RAPPORTS ADMINISTRATEUR</div><h1 class="title">Rapports détaillés</h1>
+  <p class="sub">Chaque article vendu avec prix d’achat, prix de vente, différence bénéficiaire et totaux.</p>
+  <div class="toolbar">
+    <select id="weekdayFilter" class="input"><option value="">Tous les jours</option><option value="1">Lundi</option><option value="2">Mardi</option><option value="3">Mercredi</option><option value="4">Jeudi</option><option value="5">Vendredi</option><option value="6">Samedi</option><option value="0">Dimanche</option></select>
+    <input id="reportStart" type="date" class="input"><input id="reportEnd" type="date" class="input">
+    <select id="reportShop" class="input"></select><button id="applyReportBtn" class="btn">Appliquer</button><button id="exportReportBtn" class="btn alt">⇩ Excel</button><button id="printReportBtn" class="btn alt">⇩ PDF / Imprimer</button>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><span class="muted">Ventes</span><b id="reportSalesCount">0</b></div>
+    <div class="kpi"><span class="muted">Articles</span><b id="reportItemsCount">0</b></div>
+    <div class="kpi"><span class="muted">CA USD</span><b id="reportRevenue">$0</b></div>
+    <div class="kpi"><span class="muted">Coût achat USD</span><b id="reportCost">$0</b></div>
+    <div class="kpi"><span class="muted">Bénéfice USD</span><b id="reportProfit">$0</b></div>
+  </div>
+  <div class="box">
+    <h2 style="margin-top:0">Répartition par moyen de paiement</h2>
+    <div id="paymentSummary" class="convgrid"></div>
+  </div>
+  <div class="box"><table><thead><tr>
+    <th>Date</th><th>Reçu</th><th>Article</th><th>Qté</th><th>Paiement</th>
+    <th>Achat U.</th><th>Vente U.</th><th>Bénéfice U.</th>
+    <th>Achat total</th><th>Vente totale</th><th>Bénéfice total</th>
+    <th>Vendeur</th><th>Acheteur</th>
+  </tr></thead><tbody id="reportTable"></tbody><tfoot id="reportFoot"></tfoot></table></div>
+</section>
+
+<section id="settings" class="panel ownerAdminOnly">
+  <div class="eyebrow">RÉGLAGES ADMINISTRATEUR</div><h1 class="title">Paramètres</h1>
+  <div class="box">
+    <h2>Compte administrateur</h2>
+    <div class="formgrid">
+      <div class="field"><label>Nom affiché</label><input id="adminName"></div>
+      <div class="field"><label>Email administrateur</label><input id="adminEmail" type="email"></div>
+      <div class="field"><label>Téléphone / WhatsApp administrateur</label><input id="adminPhone"></div>
+      <div class="field"><label>Statut du compte</label><input value="Actif" disabled></div>
+      <div class="field"><label>Nouveau mot de passe administrateur</label><input id="adminNewPassword" type="password" placeholder="Laisser vide pour ne pas modifier"></div>
+      <div class="field"><label>Confirmer le nouveau mot de passe</label><input id="adminConfirmPassword" type="password" placeholder="Confirmation"></div>
+    </div>
+  </div>
+  <div class="box">
+    <h2>Devise et taux</h2>
+    <div class="formgrid">
+      <div class="field"><label>Taux interne — 1 USD = ? CDF</label><input id="rateInput" type="number" min="1"></div>
+      <div class="field"><label>Devise principale d’affichage</label><select id="mainCurrency"><option>USD</option><option>CDF</option></select></div>
+      <div class="field"><label>Téléphone / WhatsApp boutique</label><input id="shopPhoneInput" inputmode="tel" placeholder="Ex. 0974112163"></div>
+      <div class="field"><label>RCCM</label><input id="rccmInput" placeholder="Ex. CD/BKV/RCCM/24-A-01446"></div>
+      <div class="field full"><label>Localisation sur reçu</label><input id="receiptLocationInput" placeholder="Ex. ISP, Bukavu/Sud-Kivu"></div>
+    </div>
+    <div class="notice" style="margin-top:14px">Tous ces champs sont modifiables par l’administrateur. Les changements du téléphone, RCCM et de la localisation seront utilisés sur les prochains reçus. Le taux reste interne et n’est jamais imprimé sur le reçu client.</div>
+  </div>
+  <div class="box">
+    <h2>Moyens de paiement disponibles</h2>
+    <p class="muted">Espèces · M-Pesa · Airtel Money · Orange Money · Afrimoney · Virement bancaire · Carte bancaire · Autre</p>
+    <div class="notice">La référence de paiement reste facultative. Elle est utile pour les paiements Mobile Money, virements et autres transactions traçables.</div>
+  </div>
+  <div class="box">
+    <h2>Sécurité et affichage</h2>
+    <div class="formgrid">
+      <div class="field"><label>Délai vendeur correction/annulation (minutes)</label><input id="correctionWindowInput" type="number" min="1" max="1440" step="1"></div>
+      <div class="field"><label>Masquage montants au démarrage</label><select id="defaultHide"><option value="yes">Oui</option><option value="no">Non</option></select></div>
+    </div>
+  </div>
+  
+  <div class="box ownerAdminOnly">
+    <h2>Commandes visiteurs & confidentialité des chats</h2>
+    <p><b>Visiteur :</b> voit les articles/prix, saisit son WhatsApp et initie une commande.</p>
+    <p><b>Vendeur/Gérant :</b> voit les commandes en attente. Le premier qui clique « Récupérer » devient l’agent responsable. Après cela, les autres vendeurs/gérants ne voient plus cette commande.</p>
+    <p><b>Administrateur :</b> peut suivre toutes les commandes, y compris celles déjà récupérées par un autre agent, et lire/intervenir dans tous les chats.</p>
+  </div>
+
+
+  <div class="box ownerAdminOnly">
+    <h2>Synchronisation & mode hors connexion</h2>
+    <p class="muted">Les ventes, stocks, commandes et chats sont enregistrés localement même sans Internet. Les éléments en attente sont envoyés à la hiérarchie lorsque la connexion revient.</p>
+    <div class="syncbox">
+      <span id="syncQueueCount" class="pill">0 en attente</span>
+      <span id="lastSyncLabel" class="muted">Jamais synchronisé</span>
+      <button id="syncNowBtn" class="btn">Synchroniser maintenant</button>
+    </div>
+  </div>
+
+<div class="actions"><button id="resetReceiptSettingsBtn" class="btn alt">Valeurs par défaut du reçu</button><button id="saveSettingsBtn" class="btn">Enregistrer les modifications</button></div>
+</section>
+
+
+<section id="storefront" class="panel visitorOnly">
+  <div class="publicHero">
+    <div>
+      <div class="eyebrow">MKG-W4F M’MEDPREN</div><h1 class="title">Boutique</h1>
+      <p class="sub">Découvrez nos articles et leurs prix. Ajoutez vos choix au panier puis démarrez votre commande avec votre numéro WhatsApp.</p>
+    </div>
+    <div class="heroCard">
+      <b>Personnel autorisé ?</b>
+      <p class="muted">Administrateur, gérant ou vendeur : connectez-vous avec les identifiants qui vous ont été attribués.</p>
+      <button class="btn" id="publicLoginBtn">Se connecter</button>
+    </div>
+  </div>
+  <div class="visitorbar">
+    <input id="storeSearch" class="input grow" placeholder="Rechercher un article…">
+    <select id="storeCategory" class="input"></select>
+    <button class="btn alt" id="visitorAccountBtn">👤 Espace visiteur</button>
+  </div>
+  <div id="storeGrid" class="storegrid" style="margin-top:16px"></div>
+  <div class="notice" style="margin-top:16px">Les visiteurs voient uniquement le catalogue public, les prix de vente et le suivi de leurs propres commandes.</div>
+  <div id="visitorCartBar" class="cartbar" style="margin-top:16px">
+    <div class="row" style="justify-content:space-between">
+      <div><b>Panier</b><div id="visitorCartSummary" class="muted">Panier vide</div></div>
+      <button class="btn" id="openOrderBtn">Commander / Chat WhatsApp</button>
+    </div>
+  </div>
+</section>
+
+<section id="visitorChat" class="panel visitorOnly">
+  <div class="eyebrow">SUIVI DE COMMANDE</div><h1 class="title">Ma commande</h1>
+  <p class="sub">Suivez l’état de votre commande et échangez avec l’agent qui la prend en charge.</p>
+  <div id="visitorOrderInfo" class="box"></div>
+  <div class="chatbox" style="margin-top:14px">
+    <div class="chathead"><div><b id="visitorChatTitle">Commande</b><div class="tiny" id="visitorChatAgent">En attente d’un agent…</div></div><span id="visitorChatStatus" class="orderstatus">En attente</span></div>
+    <div id="visitorMessages" class="chatmessages"></div>
+    <div class="chatcomposer"><input id="visitorMessageInput" class="input" placeholder="Écrivez votre message…"><button class="btn" id="visitorSendBtn">Envoyer</button></div>
+  </div>
+</section>
+
+<section id="orders" class="panel internalOnly">
+  <div class="eyebrow">COMMANDES VISITEURS</div><h1 class="title">Commandes & chat</h1>
+  <p class="sub" id="orderVisibilityNote">Récupérez une commande en attente pour la traiter.</p>
+  <div class="toolbar">
+    <button class="btn alt" id="ordersWaitingBtn">En attente</button>
+    <button class="btn alt" id="ordersMineBtn">Mes commandes</button>
+    <button class="btn alt ownerAdminOnly" id="ordersAllBtn">Toutes les commandes</button>
+  </div>
+  <div class="ordergrid" style="margin-top:14px">
+    <div id="ordersList" class="orderlist"></div>
+    <div class="chatbox">
+      <div class="chathead">
+        <div><b id="agentChatTitle">Sélectionnez une commande</b><div class="tiny" id="agentChatMeta"></div></div>
+        <div class="row"><span id="agentChatStatus" class="orderstatus">—</span><button id="claimOrderBtn" class="btn small" style="display:none">Récupérer</button><button id="finalizeOrderBtn" class="btn small" style="display:none">Finaliser</button></div>
+      </div>
+      <div id="agentMessages" class="chatmessages"><div class="muted">Aucune commande sélectionnée.</div></div>
+      <div class="chatcomposer"><input id="agentMessageInput" class="input" placeholder="Répondre au visiteur…" disabled><button class="btn" id="agentSendBtn" disabled>Envoyer</button></div>
+    </div>
+  </div>
+</section>
+
+<section id="receipt" class="panel">
+  <div class="eyebrow">REÇU</div><h1 class="title">Aperçu du reçu</h1>
+  <div class="row" style="margin-bottom:14px"><button class="btn" id="printReceiptBtn">🖨 Imprimer</button><button class="btn alt" id="backToSalesBtn">← Retour ventes</button></div>
+  <div id="receiptPreview" class="receipt"></div>
+</section>
+</main>
+
+<div id="notifPanel" class="notifs"></div>
+
+
+<div class="masterbar" id="masterBar">
+  <span class="tiny">Mode administrateur maître</span>
+  <button class="btn small" id="returnAdminBtn">Retour Admin</button>
+</div>
+
+<nav class="bottom">
+  <button class="nav visitorOnly" data-page="storefront"><b>🛍️</b>Boutique</button>
+  <button class="nav visitorOnly" data-page="visitorChat"><b>💬</b>Ma commande</button>
+  <button class="nav internalOnly active" data-page="home"><b>▦</b>Accueil</button>
+  <button class="nav internalOnly" data-page="sales"><b>▣</b>Ventes</button>
+  <button class="nav internalOnly" data-page="products"><b>◇</b>Articles</button>
+  <button class="nav internalOnly" data-page="staff"><b>♙</b>Personnel</button>
+  <button class="nav internalOnly" data-page="shops"><b>🏪</b>Boutique</button>
+  <button class="nav adminOnly internalOnly" data-page="reports"><b>▤</b>Rapports</button>
+  <button class="nav internalOnly" data-page="orders"><b>💬</b>Commandes</button>
+</nav>
+
+<div id="saleModal" class="modal"><div class="sheet">
+  <h2 id="saleModalTitle">Nouvelle vente</h2>
+  <div class="formgrid">
+    <div class="field"><label>Acheteur (facultatif)</label><input id="buyerName"></div>
+    <div class="field"><label>Téléphone / WhatsApp (facultatif)</label><input id="buyerPhone"></div>
+    <div class="field full"><label>Article</label><select id="saleProduct"></select></div>
+    <div class="field"><label>Quantité</label><input id="saleQty" type="number" min="1" value="1"></div>
+    <div class="field"><label>Devise payée</label><select id="saleCurrency"><option>USD</option><option>CDF</option></select></div>
+    <div class="field"><label>Moyen de paiement</label><select id="salePaymentMethod"></select></div>
+    <div class="field"><label>Référence de paiement (facultatif)</label><input id="salePaymentRef" placeholder="Ex. ID M-Pesa, référence virement…"></div>
+    <div class="field"><label>Prix unitaire USD</label><input id="saleUnitUsd" disabled></div>
+    <div class="field"><label>Prix unitaire CDF</label><input id="saleUnitCdf" disabled></div>
+    <div class="field"><label>Total USD</label><input id="saleTotalUsd" disabled></div>
+    <div class="field"><label>Total CDF</label><input id="saleTotalCdf" disabled></div>
+    <div class="field"><label>Montant payé</label><input id="salePaid" type="number" min="0" step="0.01"></div>
+    <div class="field full adminOnly"><label>Bénéfice estimé de cette vente</label><input id="saleProfitPreview" disabled></div>
+  </div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveSaleBtn">Valider la vente</button></div>
+</div></div>
+
+<div id="productModal" class="modal"><div class="sheet">
+  <h2>Ajouter un article</h2>
+  <div class="formgrid">
+    <div class="field"><label>Nom</label><input id="productName"></div>
+    <div class="field"><label>Catégorie</label><select id="productCategory"></select></div>
+    <div class="field"><label>Stock initial</label><input id="productStock" type="number" min="0" value="1"></div>
+    <div class="field"><label>Boutique</label><select id="productShop"></select></div>
+    <div class="field"><label>Prix d’achat USD</label><input id="productBuy" type="number" min="0" step="0.01"></div>
+    <div class="field"><label>Prix de vente USD</label><input id="productSell" type="number" min="0" step="0.01"></div>
+    <div class="field"><label>Photo</label><input id="productPhoto" type="file" accept="image/*" capture="environment"></div>
+    <div class="field full"><label>Détails</label><textarea id="productDetails" rows="2"></textarea></div>
+  </div>
+  <div id="productProfitPreview" class="notice" style="margin-top:12px"></div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveProductBtn">Enregistrer</button></div>
+</div></div>
+
+<div id="shopModal" class="modal"><div class="sheet">
+  <h2>Ajouter une boutique</h2>
+  <div class="formgrid"><div class="field"><label>Nom</label><input id="shopName"></div><div class="field"><label>Localisation</label><input id="shopLocation"></div></div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveShopBtn">Ajouter</button></div>
+</div></div>
+
+
+<div id="accessModal" class="modal"><div class="sheet">
+  <h2>Paramétrer les accès</h2>
+  <div id="accessUserLabel" class="notice"></div>
+  <div class="field" style="margin-top:12px"><label>Rôle</label><select id="accessRole"><option value="seller">Vendeur</option><option value="manager">Gérant</option><option value="admin">Administrateur</option></select></div>
+  <div class="field" style="margin-top:12px"><label>Boutiques autorisées</label><div id="accessShopChecks"></div></div>
+  <div class="field" style="margin-top:12px"><label>Autorisations spécifiques</label><div id="accessPermissionChecks" class="permissionGrid"></div></div>
+  <div class="box" style="margin-top:14px">
+    <b>Code d’accès</b>
+    <div class="codeRow" style="margin-top:8px"><span id="accessCodeDisplay" class="accessCode">------</span><button id="generateAccessCodeBtn" class="btn alt small">Générer un nouveau code</button><button id="copyAccessCodeBtn" class="btn alt small">Copier</button></div>
+  </div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button id="saveAccessBtn" class="btn">Enregistrer les accès</button></div>
+</div></div>
+
+<div id="sellerModal" class="modal"><div class="sheet">
+  <h2>Ajouter un vendeur</h2>
+  <div class="formgrid"><div class="field"><label>Nom</label><input id="sellerName"></div><div class="field"><label>Email</label><input id="sellerEmail" type="email"></div><div class="field full"><label>Boutiques autorisées</label><div id="sellerShopChecks"></div></div></div>
+  <div class="notice" style="margin-top:12px">Un code d’accès à 6 chiffres sera généré après création. Remettez-le uniquement à la personne autorisée.</div><div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveSellerBtn">Ajouter</button></div>
+</div></div>
+
+<div id="approvalModal" class="modal"><div class="sheet">
+  <h2>Demande d’approbation</h2><div class="field"><label>Motif</label><textarea id="approvalReason" rows="3"></textarea></div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="sendApprovalBtn">Envoyer</button></div>
+</div></div>
+
+
+
+<div id="visitorOrderModal" class="modal"><div class="sheet">
+  <h2>Initier la commande</h2>
+  <div id="orderCartPreview" class="box" style="margin-top:0"></div>
+  <div class="formgrid" style="margin-top:14px">
+    <div class="field"><label>Votre nom (facultatif)</label><input id="visitorNameInput" placeholder="Votre nom"></div>
+    <div class="field"><label>Numéro WhatsApp (obligatoire)</label><input id="visitorWhatsappInput" inputmode="tel" placeholder="Ex. 0970000000"></div>
+  </div>
+  <div class="notice" style="margin-top:12px">Après validation, votre demande entre dans la file d’attente. Le premier agent qui la récupère devient votre interlocuteur. Les autres vendeurs/gérants ne pourront plus accéder à cette commande ; l’administrateur peut toutefois la suivre.</div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="createVisitorOrderBtn">Démarrer la commande & le chat</button></div>
+</div></div>
+
+<div id="finalizeOrderModal" class="modal"><div class="sheet">
+  <h2>Finaliser la commande</h2>
+  <div class="formgrid">
+    <div class="field"><label>Devise payée</label><select id="orderFinalCurrency"><option>USD</option><option>CDF</option></select></div>
+    <div class="field"><label>Moyen de paiement</label><select id="orderFinalPayment"></select></div>
+    <div class="field"><label>Référence de paiement (facultatif)</label><input id="orderFinalPaymentRef"></div>
+    <div class="field"><label>Montant payé</label><input id="orderFinalPaid" type="number" min="0" step="0.01"></div>
+  </div>
+  <div id="orderFinalizePreview" class="notice" style="margin-top:12px"></div>
+  <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="confirmFinalizeOrderBtn">Finaliser et enregistrer la vente</button></div>
+</div></div>
+
+<div id="accountModal" class="modal"><div class="sheet">
+  <h2>Connexion</h2>
+  <p class="muted">L’application publique reste accessible sans compte. Le personnel autorisé se connecte selon son rôle.</p>
+  <div class="formgrid">
+    <div class="field"><label>Adresse email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="votre@email.com"></div>
+    <div class="field"><label>Type de connexion</label><select id="loginType"><option value="staff">Gérant / Vendeur — code d’accès</option><option value="admin">Administrateur — mot de passe</option></select></div>
+    <div class="field full"><label id="loginSecretLabel">Code d’accès</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Code reçu de l’administrateur"></div>
+  </div>
+  <div id="loginMessage" class="notice" style="display:none;margin-top:12px"></div>
+  <div class="actions"><button class="btn alt" id="stayVisitorBtn">Continuer comme visiteur</button><button class="btn" id="loginBtn">Se connecter</button></div>
+</div></div>
+<div id="printArea" class="print-only"><div id="receiptPrint" class="receipt"></div></div>
+
+<script>
+const RCCM="CD/BKV/RCCM/24-A-01446", SHOP_PHONE="0974112163", LOCATION="ISP, Bukavu/Sud-Kivu";
+const PAYMENT_METHODS=["Espèces","M-Pesa","Airtel Money","Orange Money","Afrimoney","Virement bancaire","Carte bancaire","Autre"];
+const PERMISSIONS=[
+ ["sales.create","Créer des ventes"],["sales.all","Voir toutes les ventes"],["sales.own","Voir ses ventes"],
+ ["products.view","Voir les articles"],["products.edit","Modifier stock/articles"],["reports.view","Voir rapports et bénéfices"],
+ ["orders.waiting","Voir commandes en attente"],["orders.own","Gérer commandes récupérées"],["staff.manage","Gérer le personnel"],
+ ["shops.manage","Gérer les boutiques"],["settings.manage","Modifier les réglages"]
+];
+const CATEGORIES=["Téléphones","Accessoires téléphones","Modes (couture)","Collections — Vêtements","Collections — Sacs","Ornements","Électronique","Divers"];
+const seed={
+  role:"seller",currentUserId:null,sessionType:"visitor",visitorSessionId:null,impersonatedByAdminId:null,theme:"light",hideMoney:true,rate:2850,mainCurrency:"USD",activePeriod:"week",
+  shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},
+  adminProfile:{name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",phone:""},
+  shops:[{id:"main",name:"Boutique principale",location:"ISP, Bukavu/Sud-Kivu"}],
+  users:[
+    {id:"u-admin",name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",password:"Admin@MKG2026",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null},
+    {id:"u-seller",name:"Vendeur 1",email:"vendeur1@mkg.local",password:null,accessCode:"482731",role:"seller",shops:["main"],permissions:["sales.create","sales.own","orders.waiting","orders.own","products.view"],status:"Actif",isPrimary:false,suspendedUntil:null}
+  ],
+  products:[
+    {id:"p1",shopId:"main",name:"Samsung Galaxy A15",category:"Téléphones",stock:6,buy:115,sell:140,details:"128 Go",photo:""},
+    {id:"p2",shopId:"main",name:"iPhone 11",category:"Téléphones",stock:2,buy:180,sell:220,details:"64 Go",photo:""},
+    {id:"p3",shopId:"main",name:"Bracelet acier",category:"Ornements",stock:12,buy:3,sell:6,details:"",photo:""},
+    {id:"p4",shopId:"main",name:"Robe couture",category:"Modes (couture)",stock:4,buy:18,sell:28,details:"Taille M",photo:""}
+  ],
+  sales:[],
+  orders:[],
+  syncQueue:[],
+  lastSyncAt:null,
+  notifications:[{id:"n1",title:"Stock faible",body:"iPhone 11 : 2 unités restantes",date:new Date().toISOString(),read:false}]
+};
+function clone(x){return JSON.parse(JSON.stringify(x))}
+let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v8"))||clone(seed)}catch(e){db=clone(seed)}
+if(!db.orders) db.orders=[];
+if(!db.syncQueue) db.syncQueue=[];
+if(!("lastSyncAt" in db)) db.lastSyncAt=null;
+if(!db.sessionType) db.sessionType="visitor";
+if(!("visitorSessionId" in db)) db.visitorSessionId=null;
+if(!("impersonatedByAdminId" in db)) db.impersonatedByAdminId=null;
+(db.users||[]).forEach(u=>{
+  if(!("accessCode" in u)) u.accessCode=u.role==="admin"?null:String(Math.floor(100000+Math.random()*900000));
+  if(!Array.isArray(u.permissions)) u.permissions=u.role==="admin"?["*"]:u.role==="manager"?["sales.create","sales.all","orders.waiting","orders.own","products.view","products.edit","reports.view"]:["sales.create","sales.own","orders.waiting","orders.own","products.view"];
+});
+if(!db.shopSettings) db.shopSettings={phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10};
+db.shopSettings.phone=db.shopSettings.phone||"0974112163";
+db.shopSettings.rccm=db.shopSettings.rccm||"CD/BKV/RCCM/24-A-01446";
+db.shopSettings.receiptLocation=db.shopSettings.receiptLocation||"ISP, Bukavu/Sud-Kivu";
+db.shopSettings.correctionWindowMin=Math.max(1,Number(db.shopSettings.correctionWindowMin)||10);
+let currentShop="main",editingSaleId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+
+const orderChannel=("BroadcastChannel" in window)?new BroadcastChannel("mkg-w4f-orders"):null;
+function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
+window.addEventListener("storage",e=>{
+  if(e.key==="mkg-full-v8"&&e.newValue){
+    try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
+  }
+});
+if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v8"));if(fresh){db=fresh;render()}}catch(e){}};
+
+function save(){localStorage.setItem("mkg-full-v8",JSON.stringify(db));broadcastOrders()}
+function queueSync(type,payload={}){
+  if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
+  db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
+  localStorage.setItem("mkg-full-v8",JSON.stringify(db));broadcastOrders()
+}
+async function syncPending(){
+  if(!navigator.onLine){alert("Connexion Internet requise pour synchroniser.");renderNetwork();return}
+  const pending=db.syncQueue.filter(x=>x.status==="pending");
+  if(!pending.length){db.lastSyncAt=new Date().toISOString();save();renderSync();return alert("Aucune donnée en attente.")}
+  // Prototype local : simule l’envoi. En production, remplacer ici par API serveur chiffrée.
+  pending.forEach(x=>{x.status="synced";x.syncedAt=new Date().toISOString()});
+  db.lastSyncAt=new Date().toISOString();save();renderSync();alert(`${pending.length} élément(s) synchronisé(s).`)
+}
+function uid(p="id"){return p+"-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6)}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+function fmt(v,c="USD"){return c==="USD"?"$"+Number(v||0).toFixed(2):Math.round(Number(v||0)).toLocaleString("fr-FR")+" FC"}
+function usdToCdf(v){return Number(v||0)*db.rate}function cdfToUsd(v){return Number(v||0)/db.rate}
+function displayDate(d){return new Date(d).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}
+function activeUser(){return db.users.find(u=>u.id===db.currentUserId)||null}
+function masterAdmin(){return db.users.find(u=>u.id===db.impersonatedByAdminId)||db.users.find(u=>u.isPrimary)||null}
+function currentRole(){return activeUser()?.role||"visitor"}
+function isAdmin(){return currentRole()==="admin"||currentRole()==="manager"}
+function isTrueAdmin(){return currentRole()==="admin"||!!db.impersonatedByAdminId}
+function hasPermission(key){
+  if(isVisitor())return false;
+  if(db.impersonatedByAdminId)return true;
+  const u=activeUser();if(!u)return false;
+  return u.role==="admin"||u.permissions?.includes("*")||u.permissions?.includes(key)
+}
+function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
+function isVisitor(){return db.sessionType==="visitor"}
+function canSeeAllOrders(){return isTrueAdmin()}
+function orderStatusLabel(s){return s==="waiting"?"En attente":s==="claimed"?"Prise en charge":s==="completed"?"Finalisée":s==="cancelled"?"Annulée":s}
+function orderTotalUsd(o){return (o.items||[]).reduce((a,i)=>a+i.sell*i.qty,0)}
+function orderTotalCdf(o){return orderTotalUsd(o)*db.rate}
+
+function isSuspended(u){
+  if(!u?.suspendedUntil)return false;
+  if(new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif";queueSync("staff.resume",{userId:u.id});save();return false}
+  return true
+}
+function saleActive(s){return s.status!=="Annulée"}function saleAgeMin(s){return(Date.now()-new Date(s.createdAt).getTime())/60000}
+function notify(title,body){db.notifications.unshift({id:uid("n"),title,body,date:new Date().toISOString(),read:false});db.notifications=db.notifications.slice(0,80);save()}
+function monthReceipt(){const d=new Date(),p=`R${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,"0")}-`;return p+String(db.sales.filter(s=>s.receipt.startsWith(p)).length+1).padStart(3,"0")}
+function shortRef(){return"MKG-"+Math.random().toString(36).slice(2,7).toUpperCase()}
+function saleCost(s){return s.items.reduce((a,i)=>a+i.buy*i.qty,0)}
+function saleListPrice(s){return s.items.reduce((a,i)=>a+i.sell*i.qty,0)}
+function saleProfit(s){return s.items.reduce((a,i)=>a+(i.sell-i.buy)*i.qty,0)}
+function availableShops(){if(isVisitor())return db.shops.filter(s=>s.id==="main");const u=activeUser();if(isTrueAdmin())return db.shops;return db.shops.filter(s=>u?.shops?.includes(s.id))}
+function selectedShopIds(){if(currentShop==="all")return availableShops().map(s=>s.id);return[currentShop]}
+
+function ensureDemoSales(){
+ if(db.sales.length)return;
+ const now=Date.now(),rate=db.rate;
+ const mk=(mins,receipt,pid,qty,cur,buyer)=>{const p=db.products.find(x=>x.id===pid),usd=p.sell*qty;return{id:uid("s"),receipt,ref:shortRef(),createdAt:new Date(now-mins*60000).toISOString(),updatedAt:new Date(now-mins*60000).toISOString(),shopId:"main",buyerName:buyer||"",buyerPhone:"",sellerId:"u-seller",sellerName:"Vendeur 1",currency:cur,paymentMethod:"Espèces",paymentRef:"",rateUsed:rate,paidTotal:cur==="USD"?usd:usd*rate,usdEquivalent:usd,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]}}
+ db.sales=[mk(4,"R2610-001","p1",1,"USD","Patrick"),mk(45,"R2610-002","p3",2,"CDF",""),mk(120,"R2610-003","p2",1,"USD","Aline")];save()
+}
+ensureDemoSales();
+
+
+function renderNetwork(){
+  const online=navigator.onLine;
+  $("#networkBadge").classList.toggle("offline",!online);
+  $("#networkBadge").innerHTML=online?"● <span>En ligne</span>":"● <span>Hors connexion</span>";
+}
+function renderSync(){
+  if(!$("#syncQueueCount"))return;
+  const pending=db.syncQueue.filter(x=>x.status==="pending").length;
+  $("#syncQueueCount").textContent=`${pending} en attente`;
+  $("#lastSyncLabel").textContent=db.lastSyncAt?`Dernière synchro : ${displayDate(db.lastSyncAt)}`:"Jamais synchronisé";
+  $("#syncNowBtn").disabled=!navigator.onLine
+}
+window.addEventListener("online",()=>{renderNetwork();renderSync()});
+window.addEventListener("offline",()=>{renderNetwork();renderSync()});
+
+function render(){
+ normalizeSuspensions();
+ document.body.classList.toggle("visitor-mode",isVisitor());
+ document.body.classList.toggle("internal-mode",!isVisitor());
+ document.body.classList.toggle("admin-impersonating",!!db.impersonatedByAdminId);
+ document.body.classList.toggle("dark",db.theme==="dark");$("#themeBtn").textContent=db.theme==="dark"?"☀️":"🌙";$("#roleBadge").textContent=isVisitor()?"Visiteur":roleLabel(currentRole());
+ $$(".visitorOnly").forEach(el=>el.style.display=isVisitor()?"":"none");
+ $$(".internalOnly").forEach(el=>el.style.display=isVisitor()?"none":"");
+ $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");
+ $$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
+ $("#shopSelect").style.display=isVisitor()?"none":"";
+ $("#settingsQuickBtn").style.display=(!isVisitor()&&isTrueAdmin())?"":"none";
+ $("#ordersQuickBtn").style.display=isVisitor()?"none":"";
+ 
+  if(!isVisitor()){
+    const canReports=hasPermission("reports.view");
+    const canStaff=hasPermission("staff.manage");
+    const canShops=hasPermission("shops.manage");
+    const canSettings=hasPermission("settings.manage")||isTrueAdmin();
+    const reportNav=$('.nav[data-page="reports"]');if(reportNav)reportNav.style.display=canReports?"":"none";
+    const staffNav=$('.nav[data-page="staff"]');if(staffNav)staffNav.style.display=canStaff||isTrueAdmin()?"":"none";
+    const shopsNav=$('.nav[data-page="shops"]');if(shopsNav)shopsNav.style.display=canShops||isTrueAdmin()?"":"none";
+    $("#settingsQuickBtn").style.display=canSettings?"":"none"
+  }
+
+ renderShopSelect();renderCategories();
+ if(isVisitor()){
+   renderStorefront();renderVisitorChat();
+   const activePanel=$(".panel.active");
+   if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront");
+ }else{
+   if(!isAdmin()&&$("#reports").classList.contains("active"))go("home");
+   if(!isTrueAdmin()&&$("#settings").classList.contains("active"))go("home");
+ }
+ renderConversions();renderDashboard();renderProducts();renderSales();renderStaff();renderShops();renderNotifications();renderReport();renderSettings();renderOrders();renderNetwork();renderSync();
+ if($("#saleCorrectionRule")) $("#saleCorrectionRule").textContent=`Le vendeur peut corriger ou annuler directement pendant ${db.shopSettings.correctionWindowMin} minute(s). Au-delà : approbation administrateur requise.`;
+ $$(".money").forEach(x=>x.classList.toggle("hidden",db.hideMoney));$("#moneyBtn").textContent=db.hideMoney?"👁 Afficher les montants":"🙈 Masquer les montants";
+}
+function renderShopSelect(){
+ const opts=availableShops().slice();if(!isVisitor()&&isTrueAdmin()&&db.shops.length>1)opts.unshift({id:"all",name:"Toutes les boutiques"});
+ if(!opts.some(s=>s.id===currentShop))currentShop=opts[0]?.id||"main";
+ $("#shopSelect").innerHTML=opts.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");$("#shopSelect").value=currentShop;
+ $("#dashboardShopName").textContent=currentShop==="all"?"Toutes les boutiques":db.shops.find(s=>s.id===currentShop)?.name||"";
+ $("#reportShop").innerHTML=`<option value="">Toutes les boutiques</option>`+availableShops().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");
+ $("#productShop").innerHTML=availableShops().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");if(currentShop!=="all")$("#productShop").value=currentShop;
+}
+function renderCategories(){
+  const old=$("#categoryFilter").value;
+  $("#categoryFilter").innerHTML=`<option value="">Toutes catégories</option>`+CATEGORIES.map(c=>`<option>${esc(c)}</option>`).join("");
+  if(CATEGORIES.includes(old))$("#categoryFilter").value=old;
+  $("#productCategory").innerHTML=CATEGORIES.map(c=>`<option>${esc(c)}</option>`).join("");
+  $("#salePaymentMethod").innerHTML=PAYMENT_METHODS.map(m=>`<option>${esc(m)}</option>`).join("");
+  $("#storeCategory").innerHTML=`<option value="">Toutes catégories</option>`+CATEGORIES.map(c=>`<option>${esc(c)}</option>`).join("");
+  $("#orderFinalPayment").innerHTML=PAYMENT_METHODS.map(m=>`<option>${esc(m)}</option>`).join("")
+}
+function renderConversions(){
+ $("#ratePill").textContent=`1 USD = ${db.rate.toLocaleString("fr-FR")} CDF`;
+ $("#c1").textContent=fmt(db.rate,"CDF");$("#c10").textContent=fmt(db.rate*10,"CDF");$("#c50").textContent=fmt(db.rate*50,"CDF");$("#c100").textContent=fmt(db.rate*100,"CDF");
+}
+function dateRangeForPeriod(){const now=new Date(),end=new Date(now),start=new Date(now),p=db.activePeriod||"week";if(p==="instant"||p==="day")start.setHours(0,0,0,0);if(p==="week"){const d=(start.getDay()+6)%7;start.setDate(start.getDate()-d);start.setHours(0,0,0,0)}if(p==="month"){start.setDate(1);start.setHours(0,0,0,0)}if(p==="year"){start.setMonth(0,1);start.setHours(0,0,0,0)}if(p==="custom"){const a=$("#dashStart").value,b=$("#dashEnd").value;if(a)start.setTime(new Date(a+"T00:00:00").getTime());if(b)end.setTime(new Date(b+"T23:59:59").getTime())}return[start,end]}
+function dashSales(){const ids=selectedShopIds(),[a,b]=dateRangeForPeriod();return db.sales.filter(s=>saleActive(s)&&ids.includes(s.shopId)&&new Date(s.createdAt)>=a&&new Date(s.createdAt)<=b)}
+function renderDashboard(){
+ const sales=dashSales(),rev=sales.reduce((a,s)=>a+s.usdEquivalent,0),profit=sales.reduce((a,s)=>a+saleProfit(s),0),cost=sales.reduce((a,s)=>a+saleCost(s),0),items=sales.reduce((a,s)=>a+s.items.reduce((z,i)=>z+i.qty,0),0);
+ $("#revMetric").textContent=fmt(rev);$("#revCdfMetric").textContent=`Équiv. ${fmt(usdToCdf(rev),"CDF")}`;
+ $("#profitMetric").textContent=fmt(profit);$("#profitCdfMetric").textContent=`Équiv. ${fmt(usdToCdf(profit),"CDF")}`;
+ $("#salesMetric").textContent=sales.length;$("#itemsMetric").textContent=`${items} article(s) vendu(s)`;$("#stockMetric").textContent=db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock<=3).length;
+ const recent=sales.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,7);
+ $("#recentSales").innerHTML=recent.map(s=>`<tr><td>${s.receipt}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}</td><td>${esc(s.sellerName)}</td></tr>`).join("")||`<tr><td colspan="8" class="muted">Aucune vente.</td></tr>`;
+ $("#recentSalesFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(rev)}<br><span class="tiny">${fmt(usdToCdf(rev),"CDF")}</span></td><td class="adminOnly">${fmt(cost)}</td><td class="adminOnly">${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td></td></tr>`;
+ $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
+}
+function renderProducts(){
+ const q=$("#productSearch").value.toLowerCase(),cat=$("#categoryFilter").value,ids=selectedShopIds();
+ const rows=db.products.filter(p=>ids.includes(p.shopId)&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
+ $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-p.buy,stockProfit=pu*p.stock;return`<tr>
+ <td><div class="product">${p.photo?`<img class="thumb" src="${p.photo}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
+ <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${fmt(p.buy)}</td><td class="adminOnly">${fmt(usdToCdf(p.buy),"CDF")}</td>
+ <td>${fmt(p.sell)}</td><td>${fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
+ <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td><td class="adminOnly"><button class="btn alt small" onclick="transferProduct('${p.id}')">Transférer</button></td></tr>`}).join("")||`<tr><td colspan="11" class="muted">Aucun article.</td></tr>`;
+ const totalBuy=rows.reduce((a,p)=>a+p.buy*p.stock,0),totalSell=rows.reduce((a,p)=>a+p.sell*p.stock,0),totalProfit=totalSell-totalBuy,totalQty=rows.reduce((a,p)=>a+p.stock,0);
+ $("#productsFoot").innerHTML=`<tr><td colspan="2">TOTAUX STOCK</td><td>${totalQty}</td><td class="adminOnly">${fmt(totalBuy)}</td><td class="adminOnly">${fmt(usdToCdf(totalBuy),"CDF")}</td><td>${fmt(totalSell)}</td><td>${fmt(usdToCdf(totalSell),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly">${fmt(usdToCdf(totalProfit),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td></td></tr>`;
+ $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
+}
+function renderSales(){
+ const q=$("#saleSearch").value.toLowerCase(),ids=selectedShopIds();const rows=db.sales.filter(s=>ids.includes(s.shopId)&&(!q||`${s.receipt} ${s.buyerName} ${s.sellerName} ${s.items.map(i=>i.name).join(" ")}`.toLowerCase().includes(q))).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+ $("#salesTable").innerHTML=rows.map(s=>{let actions=`<button class="btn alt small" onclick="showReceipt('${s.id}')">Reçu</button> `;const age=saleAgeMin(s);if(isAdmin()&&s.status!=="Annulée"){actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;if(s.pendingRequest)actions+=` <button class="btn small" onclick="approveRequest('${s.id}')">Approuver</button>`}else if(!isAdmin()&&s.status!=="Annulée"){if(age<=db.shopSettings.correctionWindowMin)actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;else actions+=`<button class="btn alt small" onclick="requestApproval('${s.id}','edit')">Demander correction</button> <button class="btn alt small" onclick="requestApproval('${s.id}','cancel')">Demander annulation</button>`}
+ return`<tr><td>${s.receipt}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly">${fmt(saleListPrice(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}<br><span class="tiny">${fmt(usdToCdf(saleProfit(s)),"CDF")}</span></td><td><span class="pill ${s.status==="Annulée"?"red":"green"}">${s.status}</span></td><td class="nowrap">${actions}</td></tr>`}).join("");
+ const active=rows.filter(s=>saleActive(s)),totalPaidUsd=active.reduce((a,s)=>a+s.usdEquivalent,0),totalCost=active.reduce((a,s)=>a+saleCost(s),0),totalSale=active.reduce((a,s)=>a+saleListPrice(s),0),totalProfit=active.reduce((a,s)=>a+saleProfit(s),0);
+ $("#salesFoot").innerHTML=`<tr><td colspan="4">TOTAUX</td><td>${fmt(totalPaidUsd)}<br><span class="tiny">${fmt(usdToCdf(totalPaidUsd),"CDF")}</span></td><td class="adminOnly">${fmt(totalCost)}</td><td class="adminOnly">${fmt(totalSale)}</td><td class="adminOnly">${fmt(totalProfit)}<br><span class="tiny">${fmt(usdToCdf(totalProfit),"CDF")}</span></td><td colspan="2"></td></tr>`;
+ $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
+}
+function normalizeSuspensions(){
+  db.users.forEach(u=>{if(u.suspendedUntil&&new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif"}});
+  save()
+}
+function renderStaff(){
+  normalizeSuspensions();
+  const me=activeUser();
+  const users=isTrueAdmin()?db.users:db.users.filter(u=>u.id===me?.id);
+  $("#staffTable").innerHTML=users.map(u=>{
+    const suspended=isSuspended(u);
+    const status=suspended?"Suspendu":(u.status||"Actif");
+    const until=suspended?displayDate(u.suspendedUntil):"—";
+    const code=u.role==="admin"?"Mot de passe":(u.accessCode||"Non généré");
+    let actions="—";
+    if(isTrueAdmin()&&!u.isPrimary){
+      actions=[
+        `<button class="btn small" onclick="openAccessManager('${u.id}')">Accès</button>`,
+        `<button class="btn alt small" onclick="impersonateUser('${u.id}')">Ouvrir comme</button>`,
+        suspended?`<button class="btn alt small" onclick="resumeUser('${u.id}')">Réactiver</button>`:`<button class="btn alt small" onclick="suspendUser('${u.id}')">Suspendre</button>`,
+        `<button class="btn danger small" onclick="deleteUser('${u.id}')">Supprimer</button>`
+      ].join(" ")
+    }else if(u.isPrimary){actions='<span class="pill">Compte maître protégé</span>'}
+    return `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><span class="pill">${roleLabel(u.role)}</span></td>
+      <td>${u.shops.map(id=>db.shops.find(s=>s.id===id)?.name).filter(Boolean).join(", ")||"—"}</td>
+      <td>${u.role==="admin"?"••••••":`<span class="accessCode" style="font-size:12px;padding:5px 7px">${esc(code)}</span>`}</td>
+      <td><span class="pill ${suspended?"red":"green"}">${status}</span></td><td>${until}</td><td class="nowrap">${actions}</td></tr>`
+  }).join("")
+}
+window.setUserRole=(id,role)=>{
+  if(!isTrueAdmin())return alert("Seul un administrateur peut modifier les rôles.");
+  const u=db.users.find(x=>x.id===id);if(!u||u.isPrimary)return;
+  if(!confirm(`Passer ${u.name} en ${roleLabel(role)} ?`))return;
+  u.role=role;u.status="Actif";u.suspendedUntil=null;queueSync("staff.role",{userId:u.id,role});
+  notify("Rôle modifié",`${u.name} est maintenant ${roleLabel(role)}.`);
+  save();render()
+};
+
+let accessEditingUserId=null;
+function defaultPermissionsForRole(role){
+  if(role==="admin")return["*"];
+  if(role==="manager")return["sales.create","sales.all","sales.own","orders.waiting","orders.own","products.view","products.edit","reports.view"];
+  return["sales.create","sales.own","orders.waiting","orders.own","products.view"]
+}
+window.openAccessManager=id=>{
+  if(!isTrueAdmin())return;
+  const u=db.users.find(x=>x.id===id);if(!u||u.isPrimary)return;
+  accessEditingUserId=id;
+  $("#accessUserLabel").innerHTML=`<b>${esc(u.name)}</b><br>${esc(u.email)}`;
+  $("#accessRole").value=u.role;
+  $("#accessShopChecks").innerHTML=db.shops.map(s=>`<label style="display:block;margin:7px 0"><input type="checkbox" value="${s.id}" ${u.shops.includes(s.id)?"checked":""}> ${esc(s.name)}</label>`).join("");
+  const perms=u.permissions||defaultPermissionsForRole(u.role);
+  $("#accessPermissionChecks").innerHTML=PERMISSIONS.filter(([k])=>k!=="settings.manage"||u.role==="admin").map(([k,l])=>`<label class="permissionItem"><input type="checkbox" value="${k}" ${perms.includes("*")||perms.includes(k)?"checked":""}> ${esc(l)}</label>`).join("");
+  $("#accessCodeDisplay").textContent=u.accessCode||"------";
+  openModal("accessModal")
+};
+$("#accessRole").onchange=()=>{
+  const role=$("#accessRole").value;
+  const perms=defaultPermissionsForRole(role);
+  $("#accessPermissionChecks").innerHTML=PERMISSIONS.filter(([k])=>k!=="settings.manage"||role==="admin").map(([k,l])=>`<label class="permissionItem"><input type="checkbox" value="${k}" ${perms.includes("*")||perms.includes(k)?"checked":""}> ${esc(l)}</label>`).join("")
+};
+$("#generateAccessCodeBtn").onclick=()=>{
+  if(!accessEditingUserId)return;
+  const code=String(Math.floor(100000+Math.random()*900000));
+  $("#accessCodeDisplay").textContent=code
+};
+$("#copyAccessCodeBtn").onclick=async()=>{
+  const code=$("#accessCodeDisplay").textContent.trim();
+  try{await navigator.clipboard.writeText(code);alert("Code copié.")}catch(e){prompt("Copiez ce code :",code)}
+};
+$("#saveAccessBtn").onclick=()=>{
+  if(!isTrueAdmin()||!accessEditingUserId)return;
+  const u=db.users.find(x=>x.id===accessEditingUserId);if(!u)return;
+  const role=$("#accessRole").value;
+  const shops=$$("#accessShopChecks input:checked").map(x=>x.value);
+  if(!shops.length)return alert("Attribuez au moins une boutique.");
+  const perms=$$("#accessPermissionChecks input:checked").map(x=>x.value);
+  u.role=role;u.shops=shops;u.permissions=role==="admin"?["*"]:perms;
+  if(role!=="admin")u.accessCode=$("#accessCodeDisplay").textContent.trim();
+  else u.accessCode=null;
+  u.status="Actif";u.suspendedUntil=null;
+  queueSync("staff.access",{userId:u.id,role:u.role,shops:u.shops,permissions:u.permissions});
+  notify("Accès modifiés",`${u.name} : rôle ${roleLabel(u.role)} et autorisations mis à jour.`);
+  save();accessEditingUserId=null;closeModals();render()
+};
+window.impersonateUser=id=>{
+  if(!isTrueAdmin())return;
+  const primary=db.users.find(u=>u.isPrimary);const target=db.users.find(u=>u.id===id);if(!primary||!target)return;
+  db.impersonatedByAdminId=primary.id;db.currentUserId=target.id;db.role=target.role;db.sessionType="internal";currentShop=target.shops?.[0]||"main";save();render();go("home")
+};
+$("#returnAdminBtn").onclick=()=>{
+  const id=db.impersonatedByAdminId;if(!id)return;
+  db.currentUserId=id;db.impersonatedByAdminId=null;db.role="admin";db.sessionType="internal";currentShop="main";save();render();go("home")
+};
+
+window.suspendUser=id=>{
+  if(!isTrueAdmin())return;
+  const u=db.users.find(x=>x.id===id);if(!u||u.isPrimary)return;
+  const minutes=Number(prompt("Durée de suspension en minutes. Exemples : 60 = 1 h, 1440 = 24 h, 10080 = 7 jours","60"));
+  if(!minutes||minutes<1)return;
+  u.suspendedUntil=new Date(Date.now()+minutes*60000).toISOString();u.status="Suspendu";queueSync("staff.suspend",{userId:u.id,until:u.suspendedUntil});
+  notify("Compte suspendu",`${u.name} est suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`);
+  save();render()
+};
+window.resumeUser=id=>{
+  if(!isTrueAdmin())return;
+  const u=db.users.find(x=>x.id===id);if(!u)return;u.suspendedUntil=null;u.status="Actif";
+  notify("Compte réactivé",`${u.name} peut de nouveau se connecter.`);save();render()
+};
+window.deleteUser=id=>{
+  if(!isTrueAdmin())return;
+  const u=db.users.find(x=>x.id===id);if(!u||u.isPrimary)return;
+  if(!confirm(`Supprimer définitivement le compte de ${u.name} ? L’historique de ses ventes sera conservé.`))return;
+  db.users=db.users.filter(x=>x.id!==id);queueSync("staff.delete",{userId:id});
+  notify("Compte supprimé",`${u.name} a été supprimé. Son historique de ventes est conservé.`);save();render()
+};
+function renderShops(){$("#shopGrid").innerHTML=db.shops.map(s=>`<div class="card"><h3>${esc(s.name)}</h3><p class="muted">${esc(s.location)}</p><p>${db.products.filter(p=>p.shopId===s.id).length} article(s) · ${db.sales.filter(v=>v.shopId===s.id&&saleActive(v)).length} vente(s)</p><button class="btn alt small adminOnly" onclick="selectShop('${s.id}')">Ouvrir</button></div>`).join("");$$(".adminOnly").forEach(el=>el.style.display=isAdmin()?"":"none")}
+function renderNotifications(){const unread=db.notifications.filter(n=>!n.read).length;$("#notifBadge").textContent=unread;$("#notifBadge").style.display=unread?"grid":"none";$("#notifPanel").innerHTML=`<div class="notif"><div class="row"><b>Notifications</b><button class="btn alt small" onclick="markAllRead()">Tout lire</button></div></div>`+db.notifications.map(n=>`<div class="notif"><b>${esc(n.title)}</b><div>${esc(n.body)}</div><small>${displayDate(n.date)}</small></div>`).join("")}
+function buildReportRows(){const wd=$("#weekdayFilter").value,start=$("#reportStart").value,end=$("#reportEnd").value,shop=$("#reportShop").value;let sales=db.sales.filter(s=>saleActive(s));if(shop)sales=sales.filter(s=>s.shopId===shop);if(start)sales=sales.filter(s=>new Date(s.createdAt)>=new Date(start+"T00:00:00"));if(end)sales=sales.filter(s=>new Date(s.createdAt)<=new Date(end+"T23:59:59"));if(wd!=="")sales=sales.filter(s=>String(new Date(s.createdAt).getDay())===wd);const rows=[];sales.forEach(s=>s.items.forEach(i=>rows.push({sale:s,item:i,cost:i.buy*i.qty,saleTotal:i.sell*i.qty,profit:(i.sell-i.buy)*i.qty})));return rows.sort((a,b)=>new Date(b.sale.createdAt)-new Date(a.sale.createdAt))}
+function renderReport(){if(!isAdmin())return;reportRows=buildReportRows();const ids=new Set(reportRows.map(r=>r.sale.id)),qty=reportRows.reduce((a,r)=>a+r.item.qty,0),cost=reportRows.reduce((a,r)=>a+r.cost,0),rev=reportRows.reduce((a,r)=>a+r.saleTotal,0),profit=reportRows.reduce((a,r)=>a+r.profit,0);$("#reportSalesCount").textContent=ids.size;$("#reportItemsCount").textContent=qty;$("#reportRevenue").textContent=fmt(rev);$("#reportCost").textContent=fmt(cost);$("#reportProfit").textContent=fmt(profit);
+ const paymentMap={};
+ reportRows.forEach(r=>{
+   const key=r.sale.paymentMethod||"Espèces";
+   if(!paymentMap[key])paymentMap[key]={sales:new Set(),usd:0};
+   paymentMap[key].sales.add(r.sale.id);
+ });
+ const seen=new Set();
+ reportRows.forEach(r=>{
+   if(seen.has(r.sale.id))return;
+   seen.add(r.sale.id);
+   const key=r.sale.paymentMethod||"Espèces";
+   paymentMap[key].usd+=r.sale.usdEquivalent||0;
+ });
+ $("#paymentSummary").innerHTML=Object.entries(paymentMap).map(([k,v])=>`<div class="conv"><span class="muted">${esc(k)}</span><b>${fmt(v.usd)}</b><span class="tiny">${v.sales.size} vente(s) · ${fmt(usdToCdf(v.usd),"CDF")}</span></div>`).join("")||`<div class="muted">Aucune vente.</div>`;
+ $("#reportTable").innerHTML=reportRows.map(r=>`<tr><td>${displayDate(r.sale.createdAt)}</td><td>${r.sale.receipt}</td><td>${esc(r.item.name)}</td><td>${r.item.qty}</td><td>${esc(r.sale.paymentMethod||"Espèces")}${r.sale.paymentRef?`<br><span class="tiny">${esc(r.sale.paymentRef)}</span>`:""}</td><td>${fmt(r.item.buy)}</td><td>${fmt(r.item.sell)}</td><td class="positive">${fmt(r.item.sell-r.item.buy)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.saleTotal)}</td><td class="positive">${fmt(r.profit)}<br><span class="tiny">${fmt(usdToCdf(r.profit),"CDF")}</span></td><td>${esc(r.sale.sellerName)}</td><td>${esc(r.sale.buyerName||"—")}</td></tr>`).join("")||`<tr><td colspan="12" class="muted">Aucun résultat.</td></tr>`;
+ $("#reportFoot").innerHTML=`<tr><td colspan="3">TOTAUX</td><td>${qty}</td><td></td><td colspan="3"></td><td>${fmt(cost)}</td><td>${fmt(rev)}</td><td>${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td colspan="2"></td></tr>`;
+}
+function renderSettings(){
+  if(!isTrueAdmin())return;
+  $("#adminName").value=db.adminProfile.name||"";
+  $("#adminEmail").value=db.adminProfile.email||"";
+  $("#adminPhone").value=db.adminProfile.phone||"";
+  $("#rateInput").value=db.rate;
+  $("#mainCurrency").value=db.mainCurrency||"USD";
+  $("#shopPhoneInput").value=db.shopSettings.phone||"";
+  $("#rccmInput").value=db.shopSettings.rccm||"";
+  $("#receiptLocationInput").value=db.shopSettings.receiptLocation||"";
+  $("#correctionWindowInput").value=db.shopSettings.correctionWindowMin||10;
+  $("#defaultHide").value=db.hideMoney?"yes":"no"
+}
+
+function go(id){
+  if(isVisitor()&&!["storefront","visitorChat"].includes(id)) id="storefront";
+  $$(".panel").forEach(p=>p.classList.toggle("active",p.id===id));
+  $$(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  window.scrollTo({top:0,behavior:"smooth"})
+}
+$$(".nav").forEach(b=>b.onclick=()=>go(b.dataset.page));$("#settingsQuickBtn").onclick=()=>{if(!isVisitor())go("settings")};$("#accountBtn").onclick=()=>openModal("accountModal");$("#roleBadge").onclick=()=>openModal("accountModal");$("#visitorAccountBtn").onclick=()=>openModal("accountModal");$("#ordersQuickBtn").onclick=()=>{if(!isVisitor())go("orders")};$("#openAccountsBtn").onclick=()=>openModal("accountModal");$("#themeBtn").onclick=()=>{db.theme=db.theme==="dark"?"light":"dark";save();render()};$("#bellBtn").onclick=()=>$("#notifPanel").classList.toggle("open");$("#shopSelect").onchange=e=>{currentShop=e.target.value;render()};$("#moneyBtn").onclick=()=>{db.hideMoney=!db.hideMoney;save();render()};$("#productSearch").oninput=renderProducts;$("#categoryFilter").onchange=renderProducts;$("#saleSearch").oninput=renderSales;$("#applyReportBtn").onclick=renderReport;$("#applyDashPeriod").onclick=renderDashboard;$("#backToSalesBtn").onclick=()=>go("sales");
+$("#convertBtn").onclick=()=>{const u=Number($("#quickUsd").value),c=Number($("#quickCdf").value);if(u>0)$("#quickCdf").value=Math.round(usdToCdf(u));else if(c>0)$("#quickUsd").value=cdfToUsd(c).toFixed(2);else alert("Entrez un montant USD ou CDF.")};
+$("#periods").onclick=e=>{if(e.target.tagName!=="BUTTON")return;$$("#periods button").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");db.activePeriod=e.target.dataset.period;$("#customPeriod").style.display=db.activePeriod==="custom"?"flex":"none";save();renderDashboard()};
+
+function openModal(id){$("#"+id).classList.add("open")}function closeModals(){$$(".modal").forEach(m=>m.classList.remove("open"))}$$("[data-close]").forEach(b=>b.onclick=closeModals);
+$("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale();$("#addProductBtn").onclick=()=>{updateProductProfitPreview();openModal("productModal")};$("#addShopBtn").onclick=()=>openModal("shopModal");$("#addSellerBtn").onclick=()=>{renderSellerChecks();openModal("sellerModal")};
+
+function saleProducts(){return db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock>0)}
+function openSale(id=null){editingSaleId=id;$("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");$("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";if(id){const s=db.sales.find(x=>x.id===id),i=s.items[0];$("#buyerName").value=s.buyerName;$("#buyerPhone").value=s.buyerPhone;$("#saleProduct").value=i.productId;$("#saleQty").value=i.qty;$("#saleCurrency").value=s.currency;$("#salePaymentMethod").value=s.paymentMethod||"Espèces";$("#salePaymentRef").value=s.paymentRef||"";$("#salePaid").value=s.paidTotal}else{$("#buyerName").value="";$("#buyerPhone").value="";$("#saleQty").value=1;$("#saleCurrency").value="USD";$("#salePaymentMethod").value="Espèces";$("#salePaymentRef").value="";$("#salePaid").value=""}updateSaleTotal();openModal("saleModal")}
+function updateSaleTotal(){const p=db.products.find(x=>x.id===$("#saleProduct").value),q=Math.max(1,Number($("#saleQty").value)||1),c=$("#saleCurrency").value;if(!p)return;$("#saleUnitUsd").value=fmt(p.sell);$("#saleUnitCdf").value=fmt(usdToCdf(p.sell),"CDF");$("#saleTotalUsd").value=fmt(p.sell*q);$("#saleTotalCdf").value=fmt(usdToCdf(p.sell*q),"CDF");$("#saleProfitPreview").value=`${fmt((p.sell-p.buy)*q)} / ${fmt(usdToCdf((p.sell-p.buy)*q),"CDF")}`;if(!editingSaleId)$("#salePaid").value=c==="USD"?(p.sell*q).toFixed(2):Math.round(usdToCdf(p.sell*q))}
+$("#saleProduct").onchange=updateSaleTotal;$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
+$("#saveSaleBtn").onclick=()=>{const p=db.products.find(x=>x.id===$("#saleProduct").value),qty=Math.max(1,Number($("#saleQty").value)||1),cur=$("#saleCurrency").value,paid=Number($("#salePaid").value);if(!p)return alert("Aucun article.");if(!paid)return alert("Montant payé requis.");if(editingSaleId){const s=db.sales.find(x=>x.id===editingSaleId),old=s.items[0],op=db.products.find(x=>x.id===old.productId);if(op)op.stock+=old.qty;if(p.stock<qty){if(op)op.stock-=old.qty;return alert("Stock insuffisant")}p.stock-=qty;s.buyerName=$("#buyerName").value.trim();s.buyerPhone=$("#buyerPhone").value.trim();s.currency=cur;s.paymentMethod=$("#salePaymentMethod").value;s.paymentRef=$("#salePaymentRef").value.trim();s.paidTotal=paid;s.rateUsed=db.rate;s.usdEquivalent=cur==="USD"?paid:paid/db.rate;s.items=[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}];s.updatedAt=new Date().toISOString();s.status="Corrigée";delete s.pendingRequest;queueSync("sale.update",{saleId:s.id});notify("Vente corrigée",`${s.receipt} corrigée.`);currentReceiptSaleId=s.id}else{if(p.stock<qty)return alert("Stock insuffisant");p.stock-=qty;const u=activeUser(),s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:p.shopId,buyerName:$("#buyerName").value.trim(),buyerPhone:$("#buyerPhone").value.trim(),sellerId:u?.id||"",sellerName:u?.name||"Utilisateur",currency:cur,paymentMethod:$("#salePaymentMethod").value,paymentRef:$("#salePaymentRef").value.trim(),rateUsed:db.rate,paidTotal:paid,usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]};db.sales.push(s);currentReceiptSaleId=s.id;queueSync("sale.create",{saleId:s.id});notify("Nouvelle vente",`${s.receipt} · ${fmt(s.paidTotal,s.currency)}`)}save();editingSaleId=null;closeModals();render();showReceipt(currentReceiptSaleId)};
+window.editSale=id=>{const s=db.sales.find(x=>x.id===id);if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"edit");openSale(id)};
+window.cancelSale=id=>{const s=db.sales.find(x=>x.id===id);if(!s||s.status==="Annulée")return;if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"cancel");if(!confirm(`Annuler ${s.receipt} ?`))return;s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";queueSync("sale.cancel",{saleId:s.id});notify("Vente annulée",`${s.receipt} annulée.`);save();render()};
+window.requestApproval=(id,type)=>{approvalContext={id,type};$("#approvalReason").value="";openModal("approvalModal")};
+$("#sendApprovalBtn").onclick=()=>{const s=db.sales.find(x=>x.id===approvalContext?.id);if(!s)return;s.pendingRequest={type:approvalContext.type,reason:$("#approvalReason").value.trim(),requestedAt:new Date().toISOString()};notify("Approbation requise",`${s.receipt} : demande de ${approvalContext.type==="cancel"?"annulation":"correction"}.`);save();approvalContext=null;closeModals();render()};
+window.approveRequest=id=>{const s=db.sales.find(x=>x.id===id);if(!s?.pendingRequest)return;if(s.pendingRequest.type==="cancel"){s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";delete s.pendingRequest;notify("Demande approuvée",`${s.receipt} annulée.`);save();render()}else{delete s.pendingRequest;save();render();openSale(id)}};
+
+function updateProductProfitPreview(){const buy=Number($("#productBuy").value)||0,sell=Number($("#productSell").value)||0,p=sell-buy;$("#productProfitPreview").innerHTML=`Bénéfice unitaire estimé : <b>${fmt(p)}</b> · <b>${fmt(usdToCdf(p),"CDF")}</b>`}
+$("#productBuy").oninput=updateProductProfitPreview;$("#productSell").oninput=updateProductProfitPreview;
+$("#saveProductBtn").onclick=async()=>{const name=$("#productName").value.trim(),stock=Math.max(0,Number($("#productStock").value)||0),buy=Number($("#productBuy").value)||0,sell=Number($("#productSell").value)||0;if(!name||sell<=0)return alert("Nom et prix de vente requis.");const f=$("#productPhoto").files[0];let photo="";if(f)photo=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(f)});db.products.push({id:uid("p"),shopId:$("#productShop").value,name,category:$("#productCategory").value,stock,buy,sell,details:$("#productDetails").value.trim(),photo});queueSync("product.create",{name,shopId:$("#productShop").value});notify("Article ajouté",`${name} ajouté.`);save();closeModals();render()};
+window.transferProduct=id=>{const p=db.products.find(x=>x.id===id),targets=db.shops.filter(s=>s.id!==p.shopId);if(!targets.length)return alert("Ajoutez d’abord une autre boutique.");const c=prompt("Destination :\n"+targets.map((s,i)=>`${i+1}. ${s.name}`).join("\n")),t=targets[Number(c)-1];if(!t)return;const q=Number(prompt(`Quantité à transférer (max ${p.stock})`));if(!q||q<1||q>p.stock)return alert("Quantité invalide.");p.stock-=q;let d=db.products.find(x=>x.shopId===t.id&&x.name===p.name&&x.sell===p.sell);if(d)d.stock+=q;else db.products.push({...clone(p),id:uid("p"),shopId:t.id,stock:q});notify("Transfert de stock",`${q} × ${p.name} vers ${t.name}.`);save();render()};
+$("#saveShopBtn").onclick=()=>{const n=$("#shopName").value.trim(),l=$("#shopLocation").value.trim();if(!n)return alert("Nom requis.");db.shops.push({id:uid("shop"),name:n,location:l||"Bukavu/Sud-Kivu"});queueSync("shop.create",{name:n});notify("Boutique ajoutée",`${n} créée.`);save();closeModals();render()};window.selectShop=id=>{currentShop=id;render();go("home")};
+function renderSellerChecks(){$("#sellerShopChecks").innerHTML=db.shops.map(s=>`<label style="display:block;margin:7px 0"><input type="checkbox" value="${s.id}" checked> ${esc(s.name)}</label>`).join("")}
+$("#saveSellerBtn").onclick=()=>{const n=$("#sellerName").value.trim(),e=$("#sellerEmail").value.trim(),shops=$$("#sellerShopChecks input:checked").map(x=>x.value);if(!n||!e||!shops.length)return alert("Informations incomplètes.");const code=String(Math.floor(100000+Math.random()*900000));
+db.users.push({id:uid("u"),name:n,email:e,password:null,accessCode:code,role:"seller",shops,permissions:defaultPermissionsForRole("seller"),status:"Actif",isPrimary:false,suspendedUntil:null});
+queueSync("staff.create",{email:e,role:"seller",shops});
+alert(`Compte créé. Code d’accès à remettre à ${n} : ${code}`);notify("Vendeur ajouté",`${n} ajouté.`);save();closeModals();render()};
+
+
+
+window.enterVisitorMode=()=>{
+  db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";
+  if(!db.visitorSessionId) db.visitorSessionId=uid("visitor");
+  currentShop="main";
+  save();closeModals();render();go("storefront")
+};
+
+$("#loginType").onchange=()=>{
+  const isA=$("#loginType").value==="admin";
+  $("#loginSecretLabel").textContent=isA?"Mot de passe administrateur":"Code d’accès";
+  $("#loginPassword").placeholder=isA?"Votre mot de passe":"Code reçu de l’administrateur"
+};
+$("#stayVisitorBtn").onclick=()=>{closeModals();enterVisitorMode()};
+$("#publicLoginBtn").onclick=()=>openModal("accountModal");
+$("#loginBtn").onclick=()=>{
+  const email=$("#loginEmail").value.trim().toLowerCase(),secret=$("#loginPassword").value.trim(),type=$("#loginType").value;
+  const u=db.users.find(x=>String(x.email).toLowerCase()===email);
+  if(!u){$("#loginMessage").textContent="Aucun accès autorisé pour cette adresse email.";$("#loginMessage").style.display="block";return}
+  if(isSuspended(u)){$("#loginMessage").textContent=`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`;$("#loginMessage").style.display="block";return}
+  if(type==="admin"){
+    if(u.role!=="admin"||!u.isPrimary||u.password!==secret){$("#loginMessage").textContent="Email ou mot de passe administrateur incorrect.";$("#loginMessage").style.display="block";return}
+  }else{
+    if(u.role==="admin"||!u.accessCode||u.accessCode!==secret){$("#loginMessage").textContent="Email ou code d’accès incorrect.";$("#loginMessage").style.display="block";return}
+  }
+  db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";save();closeModals();render();go("home")
+};
+
+
+$("#resetReceiptSettingsBtn").onclick=()=>{
+  if(!isTrueAdmin())return;
+  if(!confirm("Remettre uniquement les informations du reçu et le délai vendeur aux valeurs initiales ?"))return;
+  $("#shopPhoneInput").value="0974112163";
+  $("#rccmInput").value="CD/BKV/RCCM/24-A-01446";
+  $("#receiptLocationInput").value="ISP, Bukavu/Sud-Kivu";
+  $("#correctionWindowInput").value=10;
+};
+
+$("#syncNowBtn").onclick=syncPending;
+$("#saveSettingsBtn").onclick=()=>{
+  if(!isTrueAdmin())return alert("Accès réservé à l’administrateur.");
+  const newPhone=$("#shopPhoneInput").value.trim();
+  const newRccm=$("#rccmInput").value.trim();
+  const newLocation=$("#receiptLocationInput").value.trim();
+  const newDelay=Math.max(1,Math.min(1440,Number($("#correctionWindowInput").value)||10));
+  if(!newPhone)return alert("Indiquez le numéro Téléphone / WhatsApp de la boutique.");
+  if(!newRccm)return alert("Indiquez le RCCM.");
+  if(!newLocation)return alert("Indiquez la localisation à afficher sur le reçu.");
+  db.adminProfile={name:$("#adminName").value.trim(),email:$("#adminEmail").value.trim(),phone:$("#adminPhone").value.trim()};
+  const np=$("#adminNewPassword").value,cp=$("#adminConfirmPassword").value;
+  if(np||cp){
+    if(np.length<6)return alert("Le nouveau mot de passe doit contenir au moins 6 caractères.");
+    if(np!==cp)return alert("Les mots de passe ne correspondent pas.");
+    const primary=db.users.find(u=>u.isPrimary);if(primary)primary.password=np;
+    $("#adminNewPassword").value="";$("#adminConfirmPassword").value=""
+  }
+  db.rate=Math.max(1,Number($("#rateInput").value)||2850);
+  db.mainCurrency=$("#mainCurrency").value;
+  db.shopSettings={phone:newPhone,rccm:newRccm,receiptLocation:newLocation,correctionWindowMin:newDelay};
+  db.hideMoney=$("#defaultHide").value==="yes";
+  const au=db.users.find(u=>u.isPrimary);
+  if(au){au.name=db.adminProfile.name;au.email=db.adminProfile.email}
+  queueSync("settings.update",{rate:db.rate});notify("Réglages enregistrés",`Taux : 1 USD = ${db.rate} CDF · délai vendeur : ${newDelay} min.`);
+  save();render();
+  alert("Réglages administrateur enregistrés. Les nouveaux reçus utiliseront les nouvelles informations.")
+};
+
+window.markAllRead=()=>{db.notifications.forEach(n=>n.read=true);save();renderNotifications()};
+function receiptHtml(s){return`<div class="c"><b>MKG-W4F M'MEDPREN</b><br>MUNDU KU GUNDI WORK4FUTURE M'MEDPREN<br>${esc(db.shopSettings.receiptLocation)}<br>RCCM : ${esc(db.shopSettings.rccm)}<br>Tél./WhatsApp : ${esc(db.shopSettings.phone)}</div><hr><b>Reçu :</b> ${s.receipt}<br><b>Réf. :</b> ${s.ref}<br><b>Date :</b> ${displayDate(s.createdAt)}<br><b>Vendeur :</b> ${esc(s.sellerName)}<br><b>Moyen de paiement :</b> ${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><b>Réf. paiement :</b> ${esc(s.paymentRef)}`:""}<hr>${s.buyerName||s.buyerPhone?`<b>Acheteur :</b> ${esc(s.buyerName||"—")}<br><b>WhatsApp/Tél. :</b> ${esc(s.buyerPhone||"—")}<hr>`:""}${s.items.map(i=>`<div class="r"><span>${esc(i.name)} × ${i.qty}</span><b>${fmt((s.currency==="USD"?i.sell:i.sell*s.rateUsed)*i.qty,s.currency)}</b></div>`).join("")}<hr><div class="r"><b>TOTAL PAYÉ</b><b>${fmt(s.paidTotal,s.currency)}</b></div><div class="c" style="font-size:10px;margin-top:10px">Paiement en ${s.currency}. Merci pour votre confiance.</div><div class="barcode" style="margin-top:10px">||| |||| | ||| ||||| || |||</div><div class="c" style="font-size:9px">${s.ref}</div>`}
+window.showReceipt=id=>{const s=db.sales.find(x=>x.id===id);if(!s)return;currentReceiptSaleId=id;$("#receiptPreview").innerHTML=receiptHtml(s);go("receipt")};$("#printReceiptBtn").onclick=()=>{const s=db.sales.find(x=>x.id===currentReceiptSaleId);if(s){$("#receiptPrint").innerHTML=receiptHtml(s);window.print()}};
+
+function csvDownload(name,rows){const csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";")).join("\n"),blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
+$("#exportDashboardBtn").onclick=()=>{const rows=[["Reçu","Date","Acheteur","Moyen de paiement","Référence paiement","Total USD équiv.","Coût achat USD","Bénéfice USD"]];dashSales().forEach(s=>rows.push([s.receipt,displayDate(s.createdAt),s.buyerName,s.paymentMethod||"Espèces",s.paymentRef||"",s.usdEquivalent,saleCost(s),saleProfit(s)]));csvDownload("MKG-W4F_dashboard.csv",rows)};
+$("#exportReportBtn").onclick=()=>{const rows=[["Date","Reçu","Article","Qté","Moyen de paiement","Référence paiement","Achat U.","Vente U.","Bénéfice U.","Achat total","Vente totale","Bénéfice total"]];reportRows.forEach(r=>rows.push([displayDate(r.sale.createdAt),r.sale.receipt,r.item.name,r.item.qty,r.sale.paymentMethod||"Espèces",r.sale.paymentRef||"",r.item.buy,r.item.sell,r.item.sell-r.item.buy,r.cost,r.saleTotal,r.profit]));csvDownload("MKG-W4F_rapport_detaille.csv",rows)};
+function printTable(title,html){const w=window.open("","_blank");w.document.write(`<html><head><title>${title}</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px;font-size:11px}
+.storegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.storeitem{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:13px;box-shadow:var(--shadow)}
+.storeitem img,.storeph{width:100%;aspect-ratio:1.25;object-fit:cover;border-radius:16px;background:var(--soft);display:grid;place-items:center;font-size:40px}
+.storeitem h3{margin:10px 0 4px}.price{font-size:20px;font-weight:900;color:var(--orangeDark)}
+.cartbar{position:sticky;bottom:88px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:13px;box-shadow:var(--shadow);z-index:15}
+.ordergrid{display:grid;grid-template-columns:360px 1fr;gap:14px}
+.orderlist{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:auto;max-height:68vh}
+.ordercard{padding:13px;border-bottom:1px solid var(--line);cursor:pointer}.ordercard:hover,.ordercard.active{background:var(--soft)}
+.chatbox{background:var(--card);border:1px solid var(--line);border-radius:20px;display:flex;flex-direction:column;min-height:520px;overflow:hidden}
+.chathead{padding:14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.chatmessages{flex:1;padding:14px;overflow:auto;max-height:58vh;display:flex;flex-direction:column;gap:9px}
+.bubble{max-width:78%;padding:10px 12px;border-radius:15px;background:var(--bg);border:1px solid var(--line)}
+.bubble.mine{align-self:flex-end;background:var(--soft)}.bubble small{display:block;color:var(--muted);margin-top:4px}
+.chatcomposer{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}.chatcomposer input{flex:1}
+.orderstatus{font-size:11px;font-weight:900;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--orangeDark)}
+.visitorbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media(max-width:900px){.storegrid{grid-template-columns:repeat(2,1fr)}.ordergrid{grid-template-columns:1fr}.orderlist{max-height:300px}.chatbox{min-height:460px}}
+@media(max-width:600px){.storegrid{grid-template-columns:1fr 1fr}.storeitem{padding:9px}.storeitem h3{font-size:14px}.price{font-size:17px}}
+
+
+/* Séparation stricte des espaces */
+body.visitor-mode .internalOnly,
+body.visitor-mode .adminOnly,
+body.visitor-mode .ownerAdminOnly,
+body.visitor-mode #home,
+body.visitor-mode #sales,
+body.visitor-mode #products,
+body.visitor-mode #staff,
+body.visitor-mode #shops,
+body.visitor-mode #reports,
+body.visitor-mode #settings,
+body.visitor-mode #orders,
+body.visitor-mode #shopSelect,
+body.visitor-mode #settingsQuickBtn,
+body.visitor-mode #ordersQuickBtn,
+body.visitor-mode #bellBtn {
+  display:none !important;
+}
+body.internal-mode .visitorOnly {
+  display:none !important;
+}
+body.visitor-mode .bottom{
+  grid-template-columns:repeat(2,1fr) !important;
+}
+body.visitor-mode header .top{
+  margin-left:auto;
+}
+body.visitor-mode #roleBadge{
+  pointer-events:auto;
+}
+
+
+.publicTopActions{display:flex;gap:8px;align-items:center}
+.netbadge{padding:6px 9px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:11px;font-weight:900;white-space:nowrap}
+.netbadge.offline{background:#fee2e2;color:#991b1b}
+.syncbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.permissionGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.permissionItem{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.accessCode{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;font-weight:900;letter-spacing:2px;padding:10px 12px;border-radius:12px;background:var(--soft);display:inline-block}
+.masterbar{position:fixed;right:12px;bottom:92px;z-index:55;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:9px 11px;box-shadow:var(--shadow);display:none}
+body.admin-impersonating .masterbar{display:flex}
+.publicHero{display:grid;grid-template-columns:1.3fr .7fr;gap:18px;align-items:center;margin-bottom:18px}
+.publicHero .heroCard{background:linear-gradient(135deg,var(--soft),var(--card));border:1px solid var(--line);border-radius:26px;padding:22px}
+.codeRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:720px){.publicHero{grid-template-columns:1fr}.permissionGrid{grid-template-columns:1fr}.netbadge span{display:none}}
+
+</style></head><body><h2>${title}</h2>${html}</body></html>`);w.document.close();w.print()}
+$("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("#recentSales").closest("table").outerHTML);$("#printReportBtn").onclick=()=>printTable("MKG-W4F — Rapport détaillé",$("#reportTable").closest("table").outerHTML);
+
+
+function renderStorefront(){
+  const q=($("#storeSearch")?.value||"").toLowerCase(),cat=$("#storeCategory")?.value||"";
+  const items=db.products.filter(p=>p.shopId==="main"&&p.stock>0&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
+  $("#storeGrid").innerHTML=items.map(p=>`<div class="storeitem">
+    ${p.photo?`<img src="${p.photo}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
+    <h3>${esc(p.name)}</h3><div class="tiny">${esc(p.category)} · stock ${p.stock}</div>
+    <div class="price">${fmt(p.sell)} <span class="tiny">/ ${fmt(usdToCdf(p.sell),"CDF")}</span></div>
+    <p class="muted">${esc(p.details||"")}</p>
+    <button class="btn small" onclick="addVisitorCart('${p.id}')">＋ Ajouter au panier</button>
+  </div>`).join("")||`<div class="muted">Aucun article disponible.</div>`;
+  renderVisitorCart()
+}
+window.addVisitorCart=id=>{
+  const p=db.products.find(x=>x.id===id);if(!p)return;
+  const x=visitorCart.find(i=>i.productId===id);
+  if(x){if(x.qty<p.stock)x.qty++}else visitorCart.push({productId:id,qty:1});
+  renderVisitorCart()
+};
+window.removeVisitorCart=id=>{visitorCart=visitorCart.filter(i=>i.productId!==id);renderVisitorCart()};
+function renderVisitorCart(){
+  const details=visitorCart.map(i=>{const p=db.products.find(x=>x.id===i.productId);return p?`${p.name} × ${i.qty}`:""}).filter(Boolean);
+  const total=visitorCart.reduce((a,i)=>{const p=db.products.find(x=>x.id===i.productId);return a+(p?p.sell*i.qty:0)},0);
+  $("#visitorCartSummary").innerHTML=details.length?`${details.join(" · ")}<br><b>${fmt(total)} / ${fmt(usdToCdf(total),"CDF")}</b>`:"Panier vide";
+  $("#openOrderBtn").disabled=!visitorCart.length
+}
+$("#storeSearch").oninput=renderStorefront;$("#storeCategory").onchange=renderStorefront;
+$("#openOrderBtn").onclick=()=>{
+  if(!visitorCart.length)return;
+  const rows=visitorCart.map(i=>{const p=db.products.find(x=>x.id===i.productId);return `<div class="r"><span>${esc(p.name)} × ${i.qty}</span><b>${fmt(p.sell*i.qty)}</b></div>`}).join("");
+  const total=visitorCart.reduce((a,i)=>{const p=db.products.find(x=>x.id===i.productId);return a+p.sell*i.qty},0);
+  $("#orderCartPreview").innerHTML=`${rows}<hr><div class="r"><b>Total</b><b>${fmt(total)} / ${fmt(usdToCdf(total),"CDF")}</b></div>`;
+  $("#visitorNameInput").value="";$("#visitorWhatsappInput").value="";openModal("visitorOrderModal")
+};
+$("#createVisitorOrderBtn").onclick=()=>{
+  const wa=$("#visitorWhatsappInput").value.trim(),name=$("#visitorNameInput").value.trim();
+  if(!wa)return alert("Le numéro WhatsApp est obligatoire pour initier la commande.");
+  const items=[];
+  for(const i of visitorCart){
+    const p=db.products.find(x=>x.id===i.productId);
+    if(!p||p.stock<i.qty)return alert(`Stock insuffisant pour ${p?.name||"un article"}.`);
+    items.push({productId:p.id,name:p.name,qty:i.qty,sell:p.sell,buy:p.buy})
+  }
+  const code="CMD-"+Date.now().toString(36).slice(-6).toUpperCase();
+  const o={id:uid("ord"),code,visitorSessionId:db.visitorSessionId,visitorName:name,whatsapp:wa,shopId:"main",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
+    status:"waiting",claimedById:null,claimedByName:null,items,messages:[
+      {id:uid("msg"),senderType:"system",senderId:"system",senderName:"Système",text:"Commande initiée. Un agent va bientôt vous répondre.",at:new Date().toISOString()}
+    ]};
+  db.orders.push(o);selectedOrderId=o.id;visitorCart=[];queueSync("visitor.order",{orderId:o.id});save();closeModals();render();go("visitorChat")
+};
+function visitorOrder(){
+  const own=db.orders.filter(o=>o.visitorSessionId===db.visitorSessionId).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  if(selectedOrderId){const s=own.find(o=>o.id===selectedOrderId);if(s)return s}
+  return own[0]||null
+}
+function renderVisitorChat(){
+  if(!isVisitor())return;
+  const o=visitorOrder();
+  if(!o){
+    $("#visitorOrderInfo").innerHTML=`<div class="muted">Vous n’avez pas encore de commande. Ouvrez la boutique pour choisir des articles.</div>`;
+    $("#visitorChatTitle").textContent="Aucune commande";$("#visitorChatAgent").textContent="";$("#visitorChatStatus").textContent="—";$("#visitorMessages").innerHTML="";
+    $("#visitorMessageInput").disabled=true;$("#visitorSendBtn").disabled=true;return
+  }
+  selectedOrderId=o.id;
+  $("#visitorOrderInfo").innerHTML=`<b>${o.code}</b> · WhatsApp ${esc(o.whatsapp)}<br>${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br><b>Total : ${fmt(orderTotalUsd(o))} / ${fmt(orderTotalCdf(o),"CDF")}</b>`;
+  $("#visitorChatTitle").textContent=`Commande ${o.code}`;$("#visitorChatAgent").textContent=o.claimedByName?`Agent : ${o.claimedByName}`:"En attente d’un agent…";$("#visitorChatStatus").textContent=orderStatusLabel(o.status);
+  $("#visitorMessages").innerHTML=(o.messages||[]).map(m=>`<div class="bubble ${m.senderType==="visitor"?"mine":""}"><b>${esc(m.senderName)}</b><div>${esc(m.text)}</div><small>${displayDate(m.at)}</small></div>`).join("");
+  $("#visitorMessageInput").disabled=o.status==="completed"||o.status==="cancelled";$("#visitorSendBtn").disabled=$("#visitorMessageInput").disabled;
+  setTimeout(()=>{$("#visitorMessages").scrollTop=$("#visitorMessages").scrollHeight},0)
+}
+$("#visitorSendBtn").onclick=()=>{
+  const o=visitorOrder(),t=$("#visitorMessageInput").value.trim();if(!o||!t)return;
+  o.messages.push({id:uid("msg"),senderType:"visitor",senderId:db.visitorSessionId,senderName:o.visitorName||"Visiteur",text:t,at:new Date().toISOString()});o.updatedAt=new Date().toISOString();queueSync("visitor.message",{orderId:o.id});$("#visitorMessageInput").value="";save();renderVisitorChat();renderOrders()
+};
+$("#visitorMessageInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("#visitorSendBtn").click()});
+
+function visibleOrdersForAgent(){
+  if(isVisitor())return[];
+  const u=activeUser();
+  let arr=db.orders.slice();
+  if(isTrueAdmin()){
+    if(ordersView==="waiting")arr=arr.filter(o=>o.status==="waiting");
+    else if(ordersView==="mine")arr=arr.filter(o=>o.claimedById===u.id);
+    // all => all
+  }else{
+    // Seller/manager: waiting orders + only those personally claimed.
+    if(ordersView==="waiting")arr=arr.filter(o=>o.status==="waiting");
+    else arr=arr.filter(o=>o.claimedById===u.id);
+  }
+  return arr.sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt))
+}
+function canAgentViewOrder(o){
+  if(isTrueAdmin())return true;
+  const u=activeUser();
+  return o.status==="waiting"||o.claimedById===u?.id
+}
+function renderOrders(){
+  if(isVisitor())return;
+  $("#orderVisibilityNote").textContent=isTrueAdmin()?"L’administrateur peut suivre toutes les commandes et tous les chats.":"Les commandes déjà récupérées par un autre agent ne sont plus visibles pour vous.";
+  const arr=visibleOrdersForAgent();
+  $("#ordersAllBtn").style.display=isTrueAdmin()?"":"none";
+  $("#ordersList").innerHTML=arr.map(o=>`<div class="ordercard ${selectedOrderId===o.id?"active":""}" onclick="selectOrder('${o.id}')">
+    <div class="row" style="justify-content:space-between"><b>${o.code}</b><span class="orderstatus">${orderStatusLabel(o.status)}</span></div>
+    <div>${esc(o.visitorName||"Visiteur")} · ${esc(o.whatsapp)}</div><div class="tiny">${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(", ")}</div>
+    <div class="tiny">${o.claimedByName?`Pris par ${esc(o.claimedByName)}`:"Non attribuée"} · ${displayDate(o.updatedAt)}</div>
+  </div>`).join("")||`<div class="ordercard muted">Aucune commande dans cette vue.</div>`;
+  renderAgentChat()
+}
+window.selectOrder=id=>{
+  const o=db.orders.find(x=>x.id===id);if(!o||!canAgentViewOrder(o))return;
+  selectedOrderId=id;renderOrders()
+};
+function selectedOrder(){const o=db.orders.find(x=>x.id===selectedOrderId);return o&&canAgentViewOrder(o)?o:null}
+function renderAgentChat(){
+  const o=selectedOrder();
+  if(!o){$("#agentChatTitle").textContent="Sélectionnez une commande";$("#agentChatMeta").textContent="";$("#agentChatStatus").textContent="—";$("#agentMessages").innerHTML=`<div class="muted">Aucune commande sélectionnée.</div>`;$("#claimOrderBtn").style.display="none";$("#finalizeOrderBtn").style.display="none";$("#agentMessageInput").disabled=true;$("#agentSendBtn").disabled=true;return}
+  $("#agentChatTitle").textContent=`${o.code} · ${o.visitorName||"Visiteur"}`;$("#agentChatMeta").textContent=`WhatsApp ${o.whatsapp} · ${o.items.map(i=>`${i.name} × ${i.qty}`).join(", ")}`;
+  $("#agentChatStatus").textContent=orderStatusLabel(o.status);
+  const u=activeUser(),claimedByMe=o.claimedById===u?.id;
+  $("#claimOrderBtn").style.display=o.status==="waiting"?"":"none";
+  $("#finalizeOrderBtn").style.display=(o.status==="claimed"&&(claimedByMe||isTrueAdmin()))?"":"none";
+  const canChat=isTrueAdmin()||claimedByMe;
+  $("#agentMessageInput").disabled=!canChat||o.status==="completed"||o.status==="cancelled";$("#agentSendBtn").disabled=$("#agentMessageInput").disabled;
+  $("#agentMessages").innerHTML=(o.messages||[]).map(m=>`<div class="bubble ${(m.senderId===u?.id||m.senderType==="admin"&&isTrueAdmin())?"mine":""}"><b>${esc(m.senderName)}</b><div>${esc(m.text)}</div><small>${displayDate(m.at)}</small></div>`).join("");
+  setTimeout(()=>{$("#agentMessages").scrollTop=$("#agentMessages").scrollHeight},0)
+}
+$("#ordersWaitingBtn").onclick=()=>{ordersView="waiting";selectedOrderId=null;renderOrders()};
+$("#ordersMineBtn").onclick=()=>{ordersView="mine";selectedOrderId=null;renderOrders()};
+$("#ordersAllBtn").onclick=()=>{if(!isTrueAdmin())return;ordersView="all";selectedOrderId=null;renderOrders()};
+$("#claimOrderBtn").onclick=()=>{
+  const o=db.orders.find(x=>x.id===selectedOrderId),u=activeUser();if(!o||o.status!=="waiting")return;
+  // Atomic within this local document; production requires backend compare-and-set transaction.
+  o.status="claimed";o.claimedById=u.id;o.claimedByName=u.name;o.claimedAt=new Date().toISOString();o.updatedAt=new Date().toISOString();
+  o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:"Bonjour, j’ai récupéré votre commande et je vais vous assister pour la finaliser.",at:new Date().toISOString()});
+  queueSync("order.claim",{orderId:o.id,agentId:u.id});notify("Commande récupérée",`${o.code} est prise en charge par ${u.name}.`);save();ordersView="mine";render();go("orders")
+};
+$("#agentSendBtn").onclick=()=>{
+  const o=selectedOrder(),u=activeUser(),t=$("#agentMessageInput").value.trim();if(!o||!t)return;
+  if(!isTrueAdmin()&&o.claimedById!==u.id)return;
+  o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:t,at:new Date().toISOString()});o.updatedAt=new Date().toISOString();queueSync("order.message",{orderId:o.id});$("#agentMessageInput").value="";save();renderAgentChat();renderVisitorChat()
+};
+$("#agentMessageInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("#agentSendBtn").click()});
+$("#finalizeOrderBtn").onclick=()=>{
+  const o=selectedOrder();if(!o)return;
+  const usd=orderTotalUsd(o);$("#orderFinalCurrency").value="USD";$("#orderFinalPayment").value="Espèces";$("#orderFinalPaymentRef").value="";$("#orderFinalPaid").value=usd.toFixed(2);
+  $("#orderFinalizePreview").innerHTML=`Commande <b>${o.code}</b> · ${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br>Total : <b>${fmt(usd)} / ${fmt(usdToCdf(usd),"CDF")}</b>`;openModal("finalizeOrderModal")
+};
+$("#orderFinalCurrency").onchange=()=>{const o=selectedOrder();if(!o)return;$("#orderFinalPaid").value=$("#orderFinalCurrency").value==="USD"?orderTotalUsd(o).toFixed(2):Math.round(orderTotalCdf(o))};
+$("#confirmFinalizeOrderBtn").onclick=()=>{
+  const o=selectedOrder(),u=activeUser();if(!o)return;
+  if(!isTrueAdmin()&&o.claimedById!==u.id)return alert("Cette commande ne vous est pas attribuée.");
+  for(const i of o.items){const p=db.products.find(x=>x.id===i.productId);if(!p||p.stock<i.qty)return alert(`Stock insuffisant pour ${i.name}.`)}
+  o.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);p.stock-=i.qty});
+  const cur=$("#orderFinalCurrency").value,paid=Number($("#orderFinalPaid").value),payment=$("#orderFinalPayment").value,pref=$("#orderFinalPaymentRef").value.trim();
+  if(!paid)return alert("Indiquez le montant payé.");
+  const s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:"main",
+    buyerName:o.visitorName,buyerPhone:o.whatsapp,sellerId:u.id,sellerName:u.name,currency:cur,paymentMethod:payment,paymentRef:pref,rateUsed:db.rate,paidTotal:paid,
+    usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:o.items.map(i=>({productId:i.productId,name:i.name,qty:i.qty,buy:i.buy,sell:i.sell})),sourceOrderId:o.id};
+  db.sales.push(s);o.status="completed";o.completedAt=new Date().toISOString();o.updatedAt=new Date().toISOString();o.saleId=s.id;
+  o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:`Commande finalisée. Reçu ${s.receipt}. Merci pour votre confiance.`,at:new Date().toISOString()});
+  currentReceiptSaleId=s.id;queueSync("order.finalize",{orderId:o.id,saleId:s.id});notify("Commande finalisée",`${o.code} finalisée par ${u.name}.`);save();closeModals();render();showReceipt(s.id)
+};
+
+render();
+</script>
+</body></html>
