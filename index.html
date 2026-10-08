@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v12 — Navigation réparée</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v14 — Correctif complet</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -414,15 +414,15 @@ body.admin-impersonating .masterbar{display:flex}
 </div>
 
 <nav class="bottom">
-  <a class="nav visitorOnly" data-page="storefront" href="#storefront"><b>🛍️</b>Boutique</a>
-  <a class="nav visitorOnly" data-page="visitorChat" href="#visitorChat"><b>💬</b>Ma commande</a>
-  <a class="nav internalOnly" data-page="home" href="#home"><b>▦</b>Accueil</a>
-  <a class="nav internalOnly" data-page="sales" href="#sales"><b>▣</b>Ventes</a>
-  <a class="nav internalOnly" data-page="products" href="#products"><b>◇</b>Articles</a>
-  <a class="nav internalOnly" data-page="staff" href="#staff"><b>♙</b>Personnel</a>
-  <a class="nav internalOnly" data-page="shops" href="#shops"><b>🏪</b>Boutique</a>
-  <a class="nav adminOnly internalOnly" data-page="reports" href="#reports"><b>▤</b>Rapports</a>
-  <a class="nav internalOnly" data-page="orders" href="#orders"><b>💬</b>Commandes</a>
+  <a class="nav visitorOnly" data-page="storefront" href="#storefront" onclick="go('storefront',true);return false;"><b>🛍️</b>Boutique</a>
+  <a class="nav visitorOnly" data-page="visitorChat" href="#visitorChat" onclick="go('visitorChat',true);return false;"><b>💬</b>Ma commande</a>
+  <a class="nav internalOnly" data-page="home" href="#home" onclick="go('home',true);return false;"><b>▦</b>Accueil</a>
+  <a class="nav internalOnly" data-page="sales" href="#sales" onclick="go('sales',true);return false;"><b>▣</b>Ventes</a>
+  <a class="nav internalOnly" data-page="products" href="#products" onclick="go('products',true);return false;"><b>◇</b>Articles</a>
+  <a class="nav internalOnly" data-page="staff" href="#staff" onclick="go('staff',true);return false;"><b>♙</b>Personnel</a>
+  <a class="nav internalOnly" data-page="shops" href="#shops" onclick="go('shops',true);return false;"><b>🏪</b>Boutique</a>
+  <a class="nav adminOnly internalOnly" data-page="reports" href="#reports" onclick="go('reports',true);return false;"><b>▤</b>Rapports</a>
+  <a class="nav internalOnly" data-page="orders" href="#orders" onclick="go('orders',true);return false;"><b>💬</b>Commandes</a>
 </nav>
 
 <div id="saleModal" class="modal"><div class="sheet">
@@ -556,7 +556,20 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v12"))||clone(seed)}catch(e){db=clone(seed)}
+const STORAGE_KEY="mkg-full-v14";
+let memoryStore=null;
+function storageGet(){
+  try{
+    const raw=window.localStorage.getItem(STORAGE_KEY);
+    if(raw) return raw;
+  }catch(e){}
+  return memoryStore;
+}
+function storageSet(value){
+  memoryStore=value;
+  try{window.localStorage.setItem(STORAGE_KEY,value)}catch(e){}
+}
+let db;try{const raw=storageGet();db=raw?JSON.parse(raw):clone(seed)}catch(e){db=clone(seed)}
 if(!db.orders) db.orders=[];
 if(!db.syncQueue) db.syncQueue=[];
 if(!("lastSyncAt" in db)) db.lastSyncAt=null;
@@ -575,20 +588,20 @@ db.shopSettings.correctionWindowMin=Math.max(1,Number(db.shopSettings.correction
 let currentShop="main",editingSaleId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
-const orderChannel=("BroadcastChannel" in window)?new BroadcastChannel("mkg-w4f-orders"):null;
+let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v12"&&e.newValue){
+  if(e.key==="mkg-full-v14"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
-if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v12"));if(fresh){db=fresh;render()}}catch(e){}};
+if(orderChannel)orderChannel.onmessage=()=>{try{const raw=storageGet();const fresh=raw?JSON.parse(raw):null;if(fresh){db=fresh;render()}}catch(e){}};
 
-function save(){localStorage.setItem("mkg-full-v12",JSON.stringify(db));broadcastOrders()}
+function save(){storageSet(JSON.stringify(db));broadcastOrders()}
 function queueSync(type,payload={}){
   if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
   db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
-  localStorage.setItem("mkg-full-v12",JSON.stringify(db));broadcastOrders()
+  storageSet(JSON.stringify(db));broadcastOrders()
 }
 async function syncPending(){
   if(!navigator.onLine){alert("Connexion Internet requise pour synchroniser.");renderNetwork();return}
@@ -636,13 +649,7 @@ function saleProfit(s){return s.items.reduce((a,i)=>a+(i.sell-i.buy)*i.qty,0)}
 function availableShops(){if(isVisitor())return db.shops.filter(s=>s.id==="main");const u=activeUser();if(isTrueAdmin())return db.shops;return db.shops.filter(s=>u?.shops?.includes(s.id))}
 function selectedShopIds(){if(currentShop==="all")return availableShops().map(s=>s.id);return[currentShop]}
 
-function ensureDemoSales(){
- if(db.sales.length)return;
- const now=Date.now(),rate=db.rate;
- const mk=(mins,receipt,pid,qty,cur,buyer)=>{const p=db.products.find(x=>x.id===pid),usd=p.sell*qty;return{id:uid("s"),receipt,ref:shortRef(),createdAt:new Date(now-mins*60000).toISOString(),updatedAt:new Date(now-mins*60000).toISOString(),shopId:"main",buyerName:buyer||"",buyerPhone:"",sellerId:"u-seller",sellerName:"Vendeur 1",currency:cur,paymentMethod:"Espèces",paymentRef:"",rateUsed:rate,paidTotal:cur==="USD"?usd:usd*rate,usdEquivalent:usd,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]}}
- db.sales=[mk(4,"R2610-001","p1",1,"USD","Patrick"),mk(45,"R2610-002","p3",2,"CDF",""),mk(120,"R2610-003","p2",1,"USD","Aline")];save()
-}
-ensureDemoSales();
+function ensureDemoSales(){ return; }
 
 
 function renderNetwork(){
@@ -752,8 +759,9 @@ function renderSales(){
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
 function normalizeSuspensions(){
-  db.users.forEach(u=>{if(u.suspendedUntil&&new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif"}});
-  save()
+  let changed=false;
+  db.users.forEach(u=>{if(u.suspendedUntil&&new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif";changed=true}});
+  if(changed)save()
 }
 function renderStaff(){
   normalizeSuspensions();
