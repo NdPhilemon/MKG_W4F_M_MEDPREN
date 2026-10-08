@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v11 — PWA stable</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v12 — Navigation réparée</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -52,7 +52,7 @@ tfoot td{font-weight:900;background:var(--soft);color:var(--text)}
 .shopgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .notifs{position:fixed;right:14px;top:68px;z-index:70;width:min(410px,94vw);max-height:72vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:none}.notifs.open{display:block}.notif{padding:14px 16px;border-bottom:1px solid var(--line)}.notif:last-child{border:0}.notif small{color:var(--muted)}
 .bottom{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--nav);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));padding:7px 7px calc(7px + env(safe-area-inset-bottom))}
-.nav{border:0;background:transparent;color:var(--muted);border-radius:14px;padding:8px 4px;font-weight:750;font-size:11px}.nav b{display:block;font-size:19px;margin-bottom:4px}.nav.active{background:var(--soft);color:var(--orangeDark)}
+.nav{border:0;background:transparent;color:var(--muted);text-decoration:none;text-align:center;border-radius:14px;padding:8px 4px;font-weight:750;font-size:11px}.nav b{display:block;font-size:19px;margin-bottom:4px}.nav.active{background:var(--soft);color:var(--orangeDark)}
 .modal{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center}.modal.open{display:flex}.sheet{width:min(100%,800px);max-height:92vh;overflow:auto;background:var(--card);border-radius:26px 26px 0 0;padding:22px}.sheet h2{margin-top:0}
 .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:var(--muted);font-weight:700}.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:13px;padding:12px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
 .receipt{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;max-width:370px;margin:auto;background:white;color:#000;padding:18px;border:1px dashed #aaa}.receipt hr{border:0;border-top:1px dashed #999}.receipt .c{text-align:center}.receipt .r{display:flex;justify-content:space-between;gap:12px}.barcode{font-family:monospace;letter-spacing:-1px;font-size:18px;text-align:center;overflow:hidden}
@@ -414,15 +414,15 @@ body.admin-impersonating .masterbar{display:flex}
 </div>
 
 <nav class="bottom">
-  <button class="nav visitorOnly" data-page="storefront"><b>🛍️</b>Boutique</button>
-  <button class="nav visitorOnly" data-page="visitorChat"><b>💬</b>Ma commande</button>
-  <button class="nav internalOnly active" data-page="home"><b>▦</b>Accueil</button>
-  <button class="nav internalOnly" data-page="sales"><b>▣</b>Ventes</button>
-  <button class="nav internalOnly" data-page="products"><b>◇</b>Articles</button>
-  <button class="nav internalOnly" data-page="staff"><b>♙</b>Personnel</button>
-  <button class="nav internalOnly" data-page="shops"><b>🏪</b>Boutique</button>
-  <button class="nav adminOnly internalOnly" data-page="reports"><b>▤</b>Rapports</button>
-  <button class="nav internalOnly" data-page="orders"><b>💬</b>Commandes</button>
+  <a class="nav visitorOnly" data-page="storefront" href="#storefront"><b>🛍️</b>Boutique</a>
+  <a class="nav visitorOnly" data-page="visitorChat" href="#visitorChat"><b>💬</b>Ma commande</a>
+  <a class="nav internalOnly" data-page="home" href="#home"><b>▦</b>Accueil</a>
+  <a class="nav internalOnly" data-page="sales" href="#sales"><b>▣</b>Ventes</a>
+  <a class="nav internalOnly" data-page="products" href="#products"><b>◇</b>Articles</a>
+  <a class="nav internalOnly" data-page="staff" href="#staff"><b>♙</b>Personnel</a>
+  <a class="nav internalOnly" data-page="shops" href="#shops"><b>🏪</b>Boutique</a>
+  <a class="nav adminOnly internalOnly" data-page="reports" href="#reports"><b>▤</b>Rapports</a>
+  <a class="nav internalOnly" data-page="orders" href="#orders"><b>💬</b>Commandes</a>
 </nav>
 
 <div id="saleModal" class="modal"><div class="sheet">
@@ -556,7 +556,7 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v11"))||clone(seed)}catch(e){db=clone(seed)}
+let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v12"))||clone(seed)}catch(e){db=clone(seed)}
 if(!db.orders) db.orders=[];
 if(!db.syncQueue) db.syncQueue=[];
 if(!("lastSyncAt" in db)) db.lastSyncAt=null;
@@ -578,17 +578,17 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const orderChannel=("BroadcastChannel" in window)?new BroadcastChannel("mkg-w4f-orders"):null;
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v11"&&e.newValue){
+  if(e.key==="mkg-full-v12"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
-if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v11"));if(fresh){db=fresh;render()}}catch(e){}};
+if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v12"));if(fresh){db=fresh;render()}}catch(e){}};
 
-function save(){localStorage.setItem("mkg-full-v11",JSON.stringify(db));broadcastOrders()}
+function save(){localStorage.setItem("mkg-full-v12",JSON.stringify(db));broadcastOrders()}
 function queueSync(type,payload={}){
   if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
   db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
-  localStorage.setItem("mkg-full-v11",JSON.stringify(db));broadcastOrders()
+  localStorage.setItem("mkg-full-v12",JSON.stringify(db));broadcastOrders()
 }
 async function syncPending(){
   if(!navigator.onLine){alert("Connexion Internet requise pour synchroniser.");renderNetwork();return}
@@ -901,13 +901,34 @@ function renderSettings(){
   $("#defaultHide").value=db.hideMoney?"yes":"no"
 }
 
-function go(id){
-  if(isVisitor()&&!["storefront","visitorChat"].includes(id)) id="storefront";
+function allowedPage(id){
+  if(isVisitor()) return ["storefront","visitorChat"].includes(id) ? id : "storefront";
+  const known=["home","sales","products","staff","shops","reports","orders","settings","receipt"];
+  if(!known.includes(id)) return "home";
+  if(id==="reports"&&!isAdmin()) return "home";
+  if(id==="settings"&&!isTrueAdmin()) return "home";
+  return id
+}
+function go(id,updateHash=true){
+  id=allowedPage(id);
   $$(".panel").forEach(p=>p.classList.toggle("active",p.id===id));
   $$(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  if(updateHash && location.hash!==`#${id}`){
+    try{history.replaceState(null,"",`#${id}`)}catch(e){location.hash=id}
+  }
   window.scrollTo({top:0,behavior:"smooth"})
 }
-$$(".nav").forEach(b=>b.onclick=()=>go(b.dataset.page));$("#settingsQuickBtn").onclick=()=>{if(!isVisitor())go("settings")};$("#accountBtn").onclick=()=>openModal("accountModal");$("#roleBadge").onclick=()=>openModal("accountModal");$("#visitorAccountBtn").onclick=()=>openModal("accountModal");$("#ordersQuickBtn").onclick=()=>{if(!isVisitor())go("orders")};$("#openAccountsBtn").onclick=()=>openModal("accountModal");$("#themeBtn").onclick=()=>{db.theme=db.theme==="dark"?"light":"dark";save();render()};$("#bellBtn").onclick=()=>$("#notifPanel").classList.toggle("open");$("#shopSelect").onchange=e=>{currentShop=e.target.value;render()};$("#moneyBtn").onclick=()=>{db.hideMoney=!db.hideMoney;save();render()};$("#productSearch").oninput=renderProducts;$("#categoryFilter").onchange=renderProducts;$("#saleSearch").oninput=renderSales;$("#applyReportBtn").onclick=renderReport;$("#applyDashPeriod").onclick=renderDashboard;$("#backToSalesBtn").onclick=()=>go("sales");
+function routeFromHash(){
+  const id=(location.hash||"").replace(/^#/,"") || (isVisitor()?"storefront":"home");
+  go(id,false)
+}
+window.addEventListener("hashchange",routeFromHash);
+document.addEventListener("click",e=>{
+  const nav=e.target.closest(".nav[data-page]");
+  if(!nav)return;
+  e.preventDefault();
+  go(nav.dataset.page,true)
+});$("#settingsQuickBtn").onclick=()=>{if(!isVisitor())go("settings",true)};$("#accountBtn").onclick=()=>openModal("accountModal");$("#roleBadge").onclick=()=>openModal("accountModal");$("#visitorAccountBtn").onclick=()=>openModal("accountModal");$("#ordersQuickBtn").onclick=()=>{if(!isVisitor())go("orders",true)};$("#openAccountsBtn").onclick=()=>openModal("accountModal");$("#themeBtn").onclick=()=>{db.theme=db.theme==="dark"?"light":"dark";save();render()};$("#bellBtn").onclick=()=>$("#notifPanel").classList.toggle("open");$("#shopSelect").onchange=e=>{currentShop=e.target.value;render()};$("#moneyBtn").onclick=()=>{db.hideMoney=!db.hideMoney;save();render()};$("#productSearch").oninput=renderProducts;$("#categoryFilter").onchange=renderProducts;$("#saleSearch").oninput=renderSales;$("#applyReportBtn").onclick=renderReport;$("#applyDashPeriod").onclick=renderDashboard;$("#backToSalesBtn").onclick=()=>go("sales");
 $("#convertBtn").onclick=()=>{const u=Number($("#quickUsd").value),c=Number($("#quickCdf").value);if(u>0)$("#quickCdf").value=Math.round(usdToCdf(u));else if(c>0)$("#quickUsd").value=cdfToUsd(c).toFixed(2);else alert("Entrez un montant USD ou CDF.")};
 $("#periods").onclick=e=>{if(e.target.tagName!=="BUTTON")return;$$("#periods button").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");db.activePeriod=e.target.dataset.period;$("#customPeriod").style.display=db.activePeriod==="custom"?"flex":"none";save();renderDashboard()};
 
@@ -942,7 +963,7 @@ window.enterVisitorMode=()=>{
   db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";
   if(!db.visitorSessionId) db.visitorSessionId=uid("visitor");
   currentShop="main";
-  save();closeModals();render();go("storefront")
+  save();closeModals();render();go("storefront",true)
 };
 
 $("#loginType").onchange=()=>{
@@ -962,7 +983,7 @@ $("#loginBtn").onclick=()=>{
   }else{
     if(u.role==="admin"||!u.accessCode||u.accessCode!==secret){$("#loginMessage").textContent="Email ou code d’accès incorrect.";$("#loginMessage").style.display="block";return}
   }
-  db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";save();closeModals();render();go("home")
+  db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";save();closeModals();render();go("home",true)
 };
 
 
@@ -1265,7 +1286,10 @@ window.addEventListener("unhandledrejection",()=>{const e=document.getElementByI
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
-try{render()}catch(err){
+try{
+  render();
+  routeFromHash();
+}catch(err){
   console.error(err);
   const e=document.getElementById("appError");if(e)e.style.display="block";
 }

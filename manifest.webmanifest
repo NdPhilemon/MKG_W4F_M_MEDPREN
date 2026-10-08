@@ -1,7 +1,7 @@
 {
   "name": "M'MEDPREN - Work4Future • Mundu ku Gundi",
   "short_name": "M'MEDPREN",
-  "start_url": "./",
+  "start_url": "./#storefront",
   "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
