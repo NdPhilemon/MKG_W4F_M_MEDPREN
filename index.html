@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v14 — Correctif complet</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v16 — Catalogue public & gestion articles</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -220,10 +220,10 @@ body.admin-impersonating .masterbar{display:flex}
   <div class="toolbar"><input id="productSearch" class="input grow" placeholder="Rechercher un article…"><select id="categoryFilter" class="input"></select><button class="btn adminOnly" id="addProductBtn">＋ Ajouter</button></div>
   <div class="box"><table><thead><tr>
     <th>Article</th><th>Catégorie</th><th>Stock</th>
-    <th class="adminOnly">Achat USD</th><th class="adminOnly">Achat CDF</th>
-    <th>Vente USD</th><th>Vente CDF</th>
+    <th class="adminOnly">Achat saisi</th><th class="adminOnly">Équiv. achat</th>
+    <th>Vente saisie</th><th>Équiv. vente</th>
     <th class="adminOnly">Bénéfice/unité USD</th><th class="adminOnly">Bénéfice/unité CDF</th>
-    <th class="adminOnly">Bénéfice potentiel stock</th><th class="adminOnly">Action</th>
+    <th class="adminOnly">Bénéfice potentiel stock</th><th class="adminOnly">Public</th><th class="adminOnly">Actions</th>
   </tr></thead><tbody id="productsTable"></tbody><tfoot id="productsFoot"></tfoot></table></div>
 </section>
 
@@ -357,7 +357,7 @@ body.admin-impersonating .masterbar{display:flex}
     <button class="btn alt" id="visitorAccountBtn">👤 Espace visiteur</button>
   </div>
   <div id="storeGrid" class="storegrid" style="margin-top:16px"></div>
-  <div class="notice" style="margin-top:16px">Les visiteurs voient uniquement le catalogue public, les prix de vente et le suivi de leurs propres commandes.</div>
+  <div class="notice" style="margin-top:16px">Les visiteurs voient automatiquement les articles publiés par l’administrateur, leurs prix et le suivi de leurs propres commandes.</div>
   <div id="visitorCartBar" class="cartbar" style="margin-top:16px">
     <div class="row" style="justify-content:space-between">
       <div><b>Panier</b><div id="visitorCartSummary" class="muted">Panier vide</div></div>
@@ -446,15 +446,18 @@ body.admin-impersonating .masterbar{display:flex}
 </div></div>
 
 <div id="productModal" class="modal"><div class="sheet">
-  <h2>Ajouter un article</h2>
+  <h2 id="productModalTitle">Ajouter un article</h2>
   <div class="formgrid">
     <div class="field"><label>Nom</label><input id="productName"></div>
     <div class="field"><label>Catégorie</label><select id="productCategory"></select></div>
     <div class="field"><label>Stock initial</label><input id="productStock" type="number" min="0" value="1"></div>
     <div class="field"><label>Boutique</label><select id="productShop"></select></div>
-    <div class="field"><label>Prix d’achat USD</label><input id="productBuy" type="number" min="0" step="0.01"></div>
-    <div class="field"><label>Prix de vente USD</label><input id="productSell" type="number" min="0" step="0.01"></div>
-    <div class="field"><label>Photo</label><input id="productPhoto" type="file" accept="image/*" capture="environment"></div>
+    <div class="field"><label>Devise prix d’achat</label><select id="productBuyCurrency"><option value="USD">USD</option><option value="CDF">CDF</option></select></div>
+    <div class="field"><label>Prix d’achat</label><input id="productBuy" type="number" min="0" step="0.01" placeholder="Montant"></div>
+    <div class="field"><label>Devise prix de vente</label><select id="productSellCurrency"><option value="USD">USD</option><option value="CDF">CDF</option></select></div>
+    <div class="field"><label>Prix de vente</label><input id="productSell" type="number" min="0" step="0.01" placeholder="Montant"></div>
+    <div class="field full"><label>Photo du produit</label><input id="productPhoto" type="file" accept="image/*"><div class="tiny">Choisissez une photo depuis la Galerie, Photos ou Fichiers de votre téléphone.</div></div>
+    <div class="field"><label>Visibilité publique</label><select id="productVisibility"><option value="public">Visible aux visiteurs</option><option value="hidden">Retiré de la boutique publique</option></select></div>
     <div class="field full"><label>Détails</label><textarea id="productDetails" rows="2"></textarea></div>
   </div>
   <div id="productProfitPreview" class="notice" style="margin-top:12px"></div>
@@ -556,7 +559,7 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v14";
+const STORAGE_KEY="mkg-full-v16";
 let memoryStore=null;
 function storageGet(){
   try{
@@ -580,18 +583,21 @@ if(!("impersonatedByAdminId" in db)) db.impersonatedByAdminId=null;
   if(!("accessCode" in u)) u.accessCode=u.role==="admin"?null:String(Math.floor(100000+Math.random()*900000));
   if(!Array.isArray(u.permissions)) u.permissions=u.role==="admin"?["*"]:u.role==="manager"?["sales.create","sales.all","orders.waiting","orders.own","products.view","products.edit","reports.view"]:["sales.create","sales.own","orders.waiting","orders.own","products.view"];
 });
+(db.products||[]).forEach(p=>{
+  if(!("visibleToVisitors" in p)) p.visibleToVisitors=true;
+});
 if(!db.shopSettings) db.shopSettings={phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10};
 db.shopSettings.phone=db.shopSettings.phone||"0974112163";
 db.shopSettings.rccm=db.shopSettings.rccm||"CD/BKV/RCCM/24-A-01446";
 db.shopSettings.receiptLocation=db.shopSettings.receiptLocation||"ISP, Bukavu/Sud-Kivu";
 db.shopSettings.correctionWindowMin=Math.max(1,Number(db.shopSettings.correctionWindowMin)||10);
-let currentShop="main",editingSaleId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
+let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v14"&&e.newValue){
+  if(e.key==="mkg-full-v16"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
@@ -743,11 +749,18 @@ function renderProducts(){
  const rows=db.products.filter(p=>ids.includes(p.shopId)&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
  $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-p.buy,stockProfit=pu*p.stock;return`<tr>
  <td><div class="product">${p.photo?`<img class="thumb" src="${p.photo}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
- <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${fmt(p.buy)}</td><td class="adminOnly">${fmt(usdToCdf(p.buy),"CDF")}</td>
- <td>${fmt(p.sell)}</td><td>${fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
- <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td><td class="adminOnly"><button class="btn alt small" onclick="transferProduct('${p.id}')">Transférer</button></td></tr>`}).join("")||`<tr><td colspan="11" class="muted">Aucun article.</td></tr>`;
+ <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(usdToCdf(p.buy),"CDF"):fmt(p.buy)}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(p.buy):fmt(usdToCdf(p.buy),"CDF")}</td>
+ <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(p.sell),"CDF"):fmt(p.sell)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
+ <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td>
+ <td class="adminOnly"><span class="pill ${p.visibleToVisitors===false?"red":"green"}">${p.visibleToVisitors===false?"Retiré":"Visible"}</span></td>
+ <td class="adminOnly nowrap">
+   <button class="btn alt small" onclick="editProduct('${p.id}')">Modifier</button>
+   <button class="btn alt small" onclick="toggleProductVisibility('${p.id}')">${p.visibleToVisitors===false?"Remettre en ligne":"Retirer du public"}</button>
+   <button class="btn alt small" onclick="transferProduct('${p.id}')">Transférer</button>
+   <button class="btn danger small" onclick="deleteProduct('${p.id}')">Supprimer</button>
+ </td></tr>`}).join("")||`<tr><td colspan="11" class="muted">Aucun article.</td></tr>`;
  const totalBuy=rows.reduce((a,p)=>a+p.buy*p.stock,0),totalSell=rows.reduce((a,p)=>a+p.sell*p.stock,0),totalProfit=totalSell-totalBuy,totalQty=rows.reduce((a,p)=>a+p.stock,0);
- $("#productsFoot").innerHTML=`<tr><td colspan="2">TOTAUX STOCK</td><td>${totalQty}</td><td class="adminOnly">${fmt(totalBuy)}</td><td class="adminOnly">${fmt(usdToCdf(totalBuy),"CDF")}</td><td>${fmt(totalSell)}</td><td>${fmt(usdToCdf(totalSell),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly">${fmt(usdToCdf(totalProfit),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td></td></tr>`;
+ $("#productsFoot").innerHTML=`<tr><td colspan="2">TOTAUX STOCK</td><td>${totalQty}</td><td class="adminOnly">${fmt(totalBuy)}</td><td class="adminOnly">${fmt(usdToCdf(totalBuy),"CDF")}</td><td>${fmt(totalSell)}</td><td>${fmt(usdToCdf(totalSell),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly">${fmt(usdToCdf(totalProfit),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly"></td><td></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
 function renderSales(){
@@ -941,7 +954,23 @@ $("#convertBtn").onclick=()=>{const u=Number($("#quickUsd").value),c=Number($("#
 $("#periods").onclick=e=>{if(e.target.tagName!=="BUTTON")return;$$("#periods button").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");db.activePeriod=e.target.dataset.period;$("#customPeriod").style.display=db.activePeriod==="custom"?"flex":"none";save();renderDashboard()};
 
 function openModal(id){$("#"+id).classList.add("open")}function closeModals(){$$(".modal").forEach(m=>m.classList.remove("open"))}$$("[data-close]").forEach(b=>b.onclick=closeModals);
-$("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale();$("#addProductBtn").onclick=()=>{updateProductProfitPreview();openModal("productModal")};$("#addShopBtn").onclick=()=>openModal("shopModal");$("#addSellerBtn").onclick=()=>{renderSellerChecks();openModal("sellerModal")};
+$("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale();$("#addProductBtn").onclick=()=>{
+  editingProductId=null;
+  $("#productModalTitle").textContent="Ajouter un article";
+  $("#productName").value="";
+  $("#productStock").value="1";
+  $("#productBuy").value="";
+  $("#productSell").value="";
+  $("#productBuyCurrency").value="USD";
+  $("#productSellCurrency").value="USD";
+  $("#productCategory").selectedIndex=0;
+  $("#productVisibility").value="public";
+  $("#productPhoto").value="";
+  $("#productDetails").value="";
+  if(currentShop!=="all")$("#productShop").value=currentShop;
+  updateProductProfitPreview();
+  openModal("productModal")
+};$("#addShopBtn").onclick=()=>openModal("shopModal");$("#addSellerBtn").onclick=()=>{renderSellerChecks();openModal("sellerModal")};
 
 function saleProducts(){return db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock>0)}
 function openSale(id=null){editingSaleId=id;$("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");$("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";if(id){const s=db.sales.find(x=>x.id===id),i=s.items[0];$("#buyerName").value=s.buyerName;$("#buyerPhone").value=s.buyerPhone;$("#saleProduct").value=i.productId;$("#saleQty").value=i.qty;$("#saleCurrency").value=s.currency;$("#salePaymentMethod").value=s.paymentMethod||"Espèces";$("#salePaymentRef").value=s.paymentRef||"";$("#salePaid").value=s.paidTotal}else{$("#buyerName").value="";$("#buyerPhone").value="";$("#saleQty").value=1;$("#saleCurrency").value="USD";$("#salePaymentMethod").value="Espèces";$("#salePaymentRef").value="";$("#salePaid").value=""}updateSaleTotal();openModal("saleModal")}
@@ -954,9 +983,124 @@ window.requestApproval=(id,type)=>{approvalContext={id,type};$("#approvalReason"
 $("#sendApprovalBtn").onclick=()=>{const s=db.sales.find(x=>x.id===approvalContext?.id);if(!s)return;s.pendingRequest={type:approvalContext.type,reason:$("#approvalReason").value.trim(),requestedAt:new Date().toISOString()};notify("Approbation requise",`${s.receipt} : demande de ${approvalContext.type==="cancel"?"annulation":"correction"}.`);save();approvalContext=null;closeModals();render()};
 window.approveRequest=id=>{const s=db.sales.find(x=>x.id===id);if(!s?.pendingRequest)return;if(s.pendingRequest.type==="cancel"){s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";delete s.pendingRequest;notify("Demande approuvée",`${s.receipt} annulée.`);save();render()}else{delete s.pendingRequest;save();render();openSale(id)}};
 
-function updateProductProfitPreview(){const buy=Number($("#productBuy").value)||0,sell=Number($("#productSell").value)||0,p=sell-buy;$("#productProfitPreview").innerHTML=`Bénéfice unitaire estimé : <b>${fmt(p)}</b> · <b>${fmt(usdToCdf(p),"CDF")}</b>`}
-$("#productBuy").oninput=updateProductProfitPreview;$("#productSell").oninput=updateProductProfitPreview;
-$("#saveProductBtn").onclick=async()=>{const name=$("#productName").value.trim(),stock=Math.max(0,Number($("#productStock").value)||0),buy=Number($("#productBuy").value)||0,sell=Number($("#productSell").value)||0;if(!name||sell<=0)return alert("Nom et prix de vente requis.");const f=$("#productPhoto").files[0];let photo="";if(f)photo=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(f)});db.products.push({id:uid("p"),shopId:$("#productShop").value,name,category:$("#productCategory").value,stock,buy,sell,details:$("#productDetails").value.trim(),photo});queueSync("product.create",{name,shopId:$("#productShop").value});notify("Article ajouté",`${name} ajouté.`);save();closeModals();render()};
+function productPriceToUsd(amount,currency){
+  amount=Number(amount)||0;
+  return currency==="CDF" ? amount/db.rate : amount
+}
+function formatEnteredPrice(usd,currency){
+  return currency==="CDF" ? fmt(usdToCdf(usd),"CDF") : fmt(usd,"USD")
+}
+function updateProductProfitPreview(){
+  const buyAmount=Number($("#productBuy").value)||0;
+  const sellAmount=Number($("#productSell").value)||0;
+  const buyCur=$("#productBuyCurrency").value;
+  const sellCur=$("#productSellCurrency").value;
+  const buyUsd=productPriceToUsd(buyAmount,buyCur);
+  const sellUsd=productPriceToUsd(sellAmount,sellCur);
+  const profitUsd=sellUsd-buyUsd;
+  $("#productProfitPreview").innerHTML=
+    `Achat : <b>${formatEnteredPrice(buyUsd,buyCur)}</b> · Vente : <b>${formatEnteredPrice(sellUsd,sellCur)}</b><br>`+
+    `Bénéfice unitaire estimé : <b>${fmt(profitUsd)}</b> · <b>${fmt(usdToCdf(profitUsd),"CDF")}</b>`+
+    (profitUsd>=0?"":`<br><span style="color:var(--danger)">Attention : le prix de vente est inférieur au prix d’achat.</span>`)
+}
+$("#productBuy").oninput=updateProductProfitPreview;
+$("#productSell").oninput=updateProductProfitPreview;
+$("#productBuyCurrency").onchange=updateProductProfitPreview;
+$("#productSellCurrency").onchange=updateProductProfitPreview;
+$("#saveProductBtn").onclick=async()=>{
+  const name=$("#productName").value.trim();
+  const stock=Math.max(0,Number($("#productStock").value)||0);
+  const buyInput=Number($("#productBuy").value)||0;
+  const sellInput=Number($("#productSell").value)||0;
+  const buyCurrency=$("#productBuyCurrency").value;
+  const sellCurrency=$("#productSellCurrency").value;
+  const buy=productPriceToUsd(buyInput,buyCurrency);
+  const sell=productPriceToUsd(sellInput,sellCurrency);
+  const visibleToVisitors=$("#productVisibility").value==="public";
+  if(!name||sell<=0)return alert("Nom et prix de vente requis.");
+
+  const f=$("#productPhoto").files[0];
+  let photo=null;
+  if(f){
+    if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
+    photo=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(f)})
+  }
+
+  if(editingProductId){
+    const p=db.products.find(x=>x.id===editingProductId);
+    if(!p)return alert("Article introuvable.");
+    p.shopId=$("#productShop").value;
+    p.name=name;p.category=$("#productCategory").value;p.stock=stock;
+    p.buy=buy;p.sell=sell;p.buyCurrency=buyCurrency;p.sellCurrency=sellCurrency;
+    p.buyOriginal=buyInput;p.sellOriginal=sellInput;p.rateAtCreation=db.rate;
+    p.details=$("#productDetails").value.trim();
+    p.visibleToVisitors=visibleToVisitors;
+    if(photo!==null)p.photo=photo;
+    queueSync("product.update",{productId:p.id});
+    notify("Article modifié",`${name} a été mis à jour.`);
+  }else{
+    const p={
+      id:uid("p"),shopId:$("#productShop").value,name,
+      category:$("#productCategory").value,stock,buy,sell,
+      buyCurrency,sellCurrency,buyOriginal:buyInput,sellOriginal:sellInput,
+      rateAtCreation:db.rate,details:$("#productDetails").value.trim(),
+      photo:photo||"",visibleToVisitors
+    };
+    db.products.push(p);
+    queueSync("product.create",{productId:p.id,name,shopId:p.shopId});
+    notify("Article ajouté",`${name} ajouté et ${visibleToVisitors?"visible aux visiteurs":"retiré du public"}.`);
+  }
+
+  save();
+  editingProductId=null;
+  closeModals();
+  render();
+};
+
+window.editProduct=id=>{
+  if(!isTrueAdmin()&&!hasPermission("products.edit"))return alert("Accès non autorisé.");
+  const p=db.products.find(x=>x.id===id);if(!p)return;
+  editingProductId=id;
+  $("#productModalTitle").textContent="Modifier l’article";
+  $("#productName").value=p.name||"";
+  $("#productCategory").value=p.category||CATEGORIES[0];
+  $("#productStock").value=p.stock??0;
+  $("#productShop").value=p.shopId||"main";
+  $("#productBuyCurrency").value=p.buyCurrency||"USD";
+  $("#productSellCurrency").value=p.sellCurrency||"USD";
+  $("#productBuy").value=p.buyCurrency==="CDF"?(p.buyOriginal??Math.round(usdToCdf(p.buy))):(p.buyOriginal??p.buy);
+  $("#productSell").value=p.sellCurrency==="CDF"?(p.sellOriginal??Math.round(usdToCdf(p.sell))):(p.sellOriginal??p.sell);
+  $("#productDetails").value=p.details||"";
+  $("#productVisibility").value=p.visibleToVisitors===false?"hidden":"public";
+  $("#productPhoto").value="";
+  updateProductProfitPreview();
+  openModal("productModal")
+};
+
+window.toggleProductVisibility=id=>{
+  if(!isTrueAdmin()&&!hasPermission("products.edit"))return alert("Accès non autorisé.");
+  const p=db.products.find(x=>x.id===id);if(!p)return;
+  p.visibleToVisitors=!(p.visibleToVisitors!==false);
+  queueSync("product.visibility",{productId:p.id,visible:p.visibleToVisitors});
+  notify(p.visibleToVisitors?"Article remis en ligne":"Article retiré du public",
+         `${p.name} est ${p.visibleToVisitors?"visible aux visiteurs":"masqué de la boutique publique"}.`);
+  save();render()
+};
+
+window.deleteProduct=id=>{
+  if(!isTrueAdmin()&&!hasPermission("products.edit"))return alert("Accès non autorisé.");
+  const p=db.products.find(x=>x.id===id);if(!p)return;
+  const used=db.sales.some(s=>(s.items||[]).some(i=>i.productId===id));
+  const msg=used
+    ? `Supprimer ${p.name} ? L’article disparaîtra du catalogue, mais l’historique des ventes restera conservé.`
+    : `Supprimer définitivement ${p.name} ?`;
+  if(!confirm(msg))return;
+  db.products=db.products.filter(x=>x.id!==id);
+  queueSync("product.delete",{productId:id});
+  notify("Article supprimé",`${p.name} a été supprimé du catalogue.`);
+  save();render()
+};
+
 window.transferProduct=id=>{const p=db.products.find(x=>x.id===id),targets=db.shops.filter(s=>s.id!==p.shopId);if(!targets.length)return alert("Ajoutez d’abord une autre boutique.");const c=prompt("Destination :\n"+targets.map((s,i)=>`${i+1}. ${s.name}`).join("\n")),t=targets[Number(c)-1];if(!t)return;const q=Number(prompt(`Quantité à transférer (max ${p.stock})`));if(!q||q<1||q>p.stock)return alert("Quantité invalide.");p.stock-=q;let d=db.products.find(x=>x.shopId===t.id&&x.name===p.name&&x.sell===p.sell);if(d)d.stock+=q;else db.products.push({...clone(p),id:uid("p"),shopId:t.id,stock:q});notify("Transfert de stock",`${q} × ${p.name} vers ${t.name}.`);save();render()};
 $("#saveShopBtn").onclick=()=>{const n=$("#shopName").value.trim(),l=$("#shopLocation").value.trim();if(!n)return alert("Nom requis.");db.shops.push({id:uid("shop"),name:n,location:l||"Bukavu/Sud-Kivu"});queueSync("shop.create",{name:n});notify("Boutique ajoutée",`${n} créée.`);save();closeModals();render()};window.selectShop=id=>{currentShop=id;render();go("home")};
 function renderSellerChecks(){$("#sellerShopChecks").innerHTML=db.shops.map(s=>`<label style="display:block;margin:7px 0"><input type="checkbox" value="${s.id}" checked> ${esc(s.name)}</label>`).join("")}
@@ -1119,7 +1263,7 @@ $("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("
 
 function renderStorefront(){
   const q=($("#storeSearch")?.value||"").toLowerCase(),cat=$("#storeCategory")?.value||"";
-  const items=db.products.filter(p=>p.shopId==="main"&&p.stock>0&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
+  const items=db.products.filter(p=>p.shopId==="main"&&p.stock>0&&p.visibleToVisitors!==false&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
   $("#storeGrid").innerHTML=items.map(p=>`<div class="storeitem">
     ${p.photo?`<img src="${p.photo}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
     <h3>${esc(p.name)}</h3><div class="tiny">${esc(p.category)} · stock ${p.stock}</div>
