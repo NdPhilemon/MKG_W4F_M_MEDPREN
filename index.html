@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v16 — Catalogue public & gestion articles</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v18 — Publicités, gérant & correction rapports</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -140,6 +140,17 @@ body.admin-impersonating .masterbar{display:flex}
 .eyeBtn{position:absolute;right:7px;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:10px}
 .eyeBtn:hover{background:var(--soft)}
 
+
+.adPanel{margin:14px auto 20px;max-width:1220px;padding:0 18px}
+.adStage{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--card);min-height:150px;box-shadow:var(--shadow)}
+.adSlide{display:none;position:relative;min-height:150px}.adSlide.active{display:block}
+.adSlide img{width:100%;height:220px;object-fit:cover;display:block}
+.adCaption{position:absolute;left:14px;right:14px;bottom:14px;background:rgba(0,0,0,.62);color:white;padding:10px 12px;border-radius:14px;font-weight:800;backdrop-filter:blur(4px)}
+.adDots{display:flex;justify-content:center;gap:6px;margin-top:8px}.adDot{width:8px;height:8px;border-radius:999px;background:var(--line)}.adDot.active{background:var(--orange)}
+.adEmpty{padding:28px;text-align:center;color:var(--muted)}
+.adAdminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.adAdminCard{border:1px solid var(--line);border-radius:16px;padding:10px}.adAdminCard img{width:100%;height:110px;object-fit:cover;border-radius:12px}
+@media(max-width:700px){.adSlide img{height:160px}.adAdminGrid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -160,6 +171,12 @@ body.admin-impersonating .masterbar{display:flex}
 
 <div id="appError" style="display:none;position:fixed;left:10px;right:10px;top:80px;z-index:9999;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:12px;border-radius:12px;font-family:system-ui">
   Une erreur de l'application a été détectée. Rechargez la page ou réinstallez la dernière version.
+</div>
+
+
+<div id="globalAdPanel" class="adPanel">
+  <div id="adStage" class="adStage"><div class="adEmpty">Aucune publicité active.</div></div>
+  <div id="adDots" class="adDots"></div>
 </div>
 
 <main>
@@ -230,7 +247,7 @@ body.admin-impersonating .masterbar{display:flex}
 <section id="staff" class="panel">
   <div class="eyebrow">PERSONNEL & ACCÈS</div><h1 class="title">Personnel</h1>
   <p class="sub">L’administrateur crée les comptes, génère les codes d’accès, choisit les rôles et paramètre les autorisations de chaque personne.</p>
-  <div class="row ownerAdminOnly"><button class="btn" id="addSellerBtn">＋ Ajouter vendeur</button><button class="btn alt" id="openAccountsBtn">👤 Tester un compte</button></div>
+  <div class="row ownerAdminOnly"><button class="btn" id="addSellerBtn">＋ Ajouter vendeur / gérant</button><button class="btn alt" id="openAccountsBtn">👤 Tester un compte</button></div>
   <div class="box ownerAdminOnly">
     <h2 style="margin-top:0">Règle de connexion</h2>
     <p><b>Administrateur principal :</b> email + mot de passe personnel défini par lui-même.</p>
@@ -259,7 +276,7 @@ body.admin-impersonating .masterbar{display:flex}
   <div class="toolbar">
     <select id="weekdayFilter" class="input"><option value="">Tous les jours</option><option value="1">Lundi</option><option value="2">Mardi</option><option value="3">Mercredi</option><option value="4">Jeudi</option><option value="5">Vendredi</option><option value="6">Samedi</option><option value="0">Dimanche</option></select>
     <input id="reportStart" type="date" class="input"><input id="reportEnd" type="date" class="input">
-    <select id="reportShop" class="input"></select><button id="applyReportBtn" class="btn">Appliquer</button><button id="exportReportBtn" class="btn alt">⇩ Excel</button><button id="printReportBtn" class="btn alt">⇩ PDF / Imprimer</button>
+    <select id="reportShop" class="input"></select><button id="applyReportBtn" class="btn">Appliquer</button><button id="exportReportBtn" class="btn alt">⇩ Excel</button><button id="printReportBtn" class="btn alt">⇩ PDF / Imprimer</button><button id="resetReportFiltersBtn" class="btn alt">↺ Réinitialiser filtres</button><button id="resetReportDataBtn" class="btn danger ownerAdminOnly">⚠ Réinitialiser le rapport</button>
   </div>
   <div class="kpis">
     <div class="kpi"><span class="muted">Ventes</span><b id="reportSalesCount">0</b></div>
@@ -276,7 +293,7 @@ body.admin-impersonating .masterbar{display:flex}
     <th>Date</th><th>Reçu</th><th>Article</th><th>Qté</th><th>Paiement</th>
     <th>Achat U.</th><th>Vente U.</th><th>Bénéfice U.</th>
     <th>Achat total</th><th>Vente totale</th><th>Bénéfice total</th>
-    <th>Vendeur</th><th>Acheteur</th>
+    <th>Vendeur</th><th>Acheteur</th><th class="ownerAdminOnly">Action</th>
   </tr></thead><tbody id="reportTable"></tbody><tfoot id="reportFoot"></tfoot></table></div>
 </section>
 
@@ -333,6 +350,18 @@ body.admin-impersonating .masterbar{display:flex}
       <span id="lastSyncLabel" class="muted">Jamais synchronisé</span>
       <button id="syncNowBtn" class="btn">Synchroniser maintenant</button>
     </div>
+  </div>
+
+
+  <div class="box ownerAdminOnly">
+    <h2>Panneau publicitaire</h2>
+    <p class="muted">Ajoutez des images qui défilent automatiquement pour tout le monde. Le texte est facultatif.</p>
+    <div class="formgrid">
+      <div class="field"><label>Image publicitaire</label><input id="adImageInput" type="file" accept="image/*"></div>
+      <div class="field"><label>Texte facultatif</label><input id="adTextInput" placeholder="Promotion, nouveauté, message…"></div>
+    </div>
+    <div class="actions"><button id="addAdBtn" class="btn">Ajouter au panneau</button></div>
+    <div id="adAdminList" class="adAdminGrid"></div>
   </div>
 
 <div class="actions"><button id="resetReceiptSettingsBtn" class="btn alt">Valeurs par défaut du reçu</button><button id="saveSettingsBtn" class="btn">Enregistrer les modifications</button></div>
@@ -485,9 +514,9 @@ body.admin-impersonating .masterbar{display:flex}
 </div></div>
 
 <div id="sellerModal" class="modal"><div class="sheet">
-  <h2>Ajouter un vendeur</h2>
-  <div class="formgrid"><div class="field"><label>Nom</label><input id="sellerName"></div><div class="field"><label>Email</label><input id="sellerEmail" type="email"></div><div class="field full"><label>Boutiques autorisées</label><div id="sellerShopChecks"></div></div></div>
-  <div class="notice" style="margin-top:12px">Un code d’accès à 6 chiffres sera généré après création. Remettez-le uniquement à la personne autorisée.</div><div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveSellerBtn">Ajouter</button></div>
+  <h2>Ajouter un compte personnel</h2>
+  <div class="formgrid"><div class="field"><label>Nom</label><input id="sellerName"></div><div class="field"><label>Email</label><input id="sellerEmail" type="email"></div><div class="field"><label>Rôle</label><select id="sellerRole"><option value="seller">Vendeur</option><option value="manager">Gérant</option></select></div><div class="field full"><label>Boutiques autorisées</label><div id="sellerShopChecks"></div></div></div>
+  <div class="notice" style="margin-top:12px">Choisissez directement Vendeur ou Gérant. Un code d’accès à 6 chiffres sera généré après création.</div><div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveSellerBtn">Ajouter</button></div>
 </div></div>
 
 <div id="approvalModal" class="modal"><div class="sheet">
@@ -542,7 +571,7 @@ const PERMISSIONS=[
  ["orders.waiting","Voir commandes en attente"],["orders.own","Gérer commandes récupérées"],["staff.manage","Gérer le personnel"],
  ["shops.manage","Gérer les boutiques"],["settings.manage","Modifier les réglages"]
 ];
-const CATEGORIES=["Téléphones","Accessoires téléphones","Modes (couture)","Collections — Vêtements","Collections — Sacs","Ornements","Électronique","Divers"];
+const CATEGORIES=["Téléphones","Accessoires téléphones","Modes (couture)","Collections — Vêtements","Collections — Sacs","Ornements","Parfums & déodorants","Électronique","Divers"];
 const seed={
   role:"seller",currentUserId:null,sessionType:"visitor",visitorSessionId:null,impersonatedByAdminId:null,theme:"light",hideMoney:true,rate:2400,mainCurrency:"USD",activePeriod:"week",
   shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},
@@ -552,6 +581,7 @@ const seed={
     {id:"u-admin",name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",password:"202020",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null}
   ],
   products:[],
+  ads:[],
   sales:[],
   orders:[],
   syncQueue:[],
@@ -559,7 +589,7 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v16";
+const STORAGE_KEY="mkg-full-v18";
 let memoryStore=null;
 function storageGet(){
   try{
@@ -573,6 +603,7 @@ function storageSet(value){
   try{window.localStorage.setItem(STORAGE_KEY,value)}catch(e){}
 }
 let db;try{const raw=storageGet();db=raw?JSON.parse(raw):clone(seed)}catch(e){db=clone(seed)}
+if(!db.ads) db.ads=[];
 if(!db.orders) db.orders=[];
 if(!db.syncQueue) db.syncQueue=[];
 if(!("lastSyncAt" in db)) db.lastSyncAt=null;
@@ -597,7 +628,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v16"&&e.newValue){
+  if(e.key==="mkg-full-v18"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
@@ -707,7 +738,7 @@ function render(){
    if(!isAdmin()&&$("#reports").classList.contains("active"))go("home");
    if(!isTrueAdmin()&&$("#settings").classList.contains("active"))go("home");
  }
- renderConversions();renderDashboard();renderProducts();renderSales();renderStaff();renderShops();renderNotifications();renderReport();renderSettings();renderOrders();renderNetwork();renderSync();
+ renderConversions();renderDashboard();renderProducts();renderSales();renderStaff();renderShops();renderNotifications();renderReport();renderSettings();renderOrders();renderAds();renderAdAdmin();renderNetwork();renderSync();
  if($("#saleCorrectionRule")) $("#saleCorrectionRule").textContent=`Le vendeur peut corriger ou annuler directement pendant ${db.shopSettings.correctionWindowMin} minute(s). Au-delà : approbation administrateur requise.`;
  $$(".money").forEach(x=>x.classList.toggle("hidden",db.hideMoney));$("#moneyBtn").textContent=db.hideMoney?"👁 Afficher les montants":"🙈 Masquer les montants";
 }
@@ -905,7 +936,7 @@ function renderReport(){if(!isAdmin())return;reportRows=buildReportRows();const 
    paymentMap[key].usd+=r.sale.usdEquivalent||0;
  });
  $("#paymentSummary").innerHTML=Object.entries(paymentMap).map(([k,v])=>`<div class="conv"><span class="muted">${esc(k)}</span><b>${fmt(v.usd)}</b><span class="tiny">${v.sales.size} vente(s) · ${fmt(usdToCdf(v.usd),"CDF")}</span></div>`).join("")||`<div class="muted">Aucune vente.</div>`;
- $("#reportTable").innerHTML=reportRows.map(r=>`<tr><td>${displayDate(r.sale.createdAt)}</td><td>${r.sale.receipt}</td><td>${esc(r.item.name)}</td><td>${r.item.qty}</td><td>${esc(r.sale.paymentMethod||"Espèces")}${r.sale.paymentRef?`<br><span class="tiny">${esc(r.sale.paymentRef)}</span>`:""}</td><td>${fmt(r.item.buy)}</td><td>${fmt(r.item.sell)}</td><td class="positive">${fmt(r.item.sell-r.item.buy)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.saleTotal)}</td><td class="positive">${fmt(r.profit)}<br><span class="tiny">${fmt(usdToCdf(r.profit),"CDF")}</span></td><td>${esc(r.sale.sellerName)}</td><td>${esc(r.sale.buyerName||"—")}</td></tr>`).join("")||`<tr><td colspan="12" class="muted">Aucun résultat.</td></tr>`;
+ $("#reportTable").innerHTML=reportRows.map(r=>`<tr><td>${displayDate(r.sale.createdAt)}</td><td>${r.sale.receipt}</td><td>${esc(r.item.name)}</td><td>${r.item.qty}</td><td>${esc(r.sale.paymentMethod||"Espèces")}${r.sale.paymentRef?`<br><span class="tiny">${esc(r.sale.paymentRef)}</span>`:""}</td><td>${fmt(r.item.buy)}</td><td>${fmt(r.item.sell)}</td><td class="positive">${fmt(r.item.sell-r.item.buy)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.saleTotal)}</td><td class="positive">${fmt(r.profit)}<br><span class="tiny">${fmt(usdToCdf(r.profit),"CDF")}</span></td><td>${esc(r.sale.sellerName)}</td><td>${esc(r.sale.buyerName||"—")}</td><td class="ownerAdminOnly"><button class="btn danger small" onclick="deleteReportItem('${r.sale.id}','${r.item.productId}')">Supprimer erreur</button></td></tr>`).join("")||`<tr><td colspan="12" class="muted">Aucun résultat.</td></tr>`;
  $("#reportFoot").innerHTML=`<tr><td colspan="3">TOTAUX</td><td>${qty}</td><td></td><td colspan="3"></td><td>${fmt(cost)}</td><td>${fmt(rev)}</td><td>${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td colspan="2"></td></tr>`;
 }
 function renderSettings(){
@@ -949,7 +980,37 @@ document.addEventListener("click",e=>{
   if(!nav)return;
   e.preventDefault();
   go(nav.dataset.page,true)
-});$("#settingsQuickBtn").onclick=()=>{if(!isVisitor())go("settings",true)};$("#accountBtn").onclick=()=>openModal("accountModal");$("#roleBadge").onclick=()=>openModal("accountModal");$("#visitorAccountBtn").onclick=()=>openModal("accountModal");$("#ordersQuickBtn").onclick=()=>{if(!isVisitor())go("orders",true)};$("#openAccountsBtn").onclick=()=>openModal("accountModal");$("#themeBtn").onclick=()=>{db.theme=db.theme==="dark"?"light":"dark";save();render()};$("#bellBtn").onclick=()=>$("#notifPanel").classList.toggle("open");$("#shopSelect").onchange=e=>{currentShop=e.target.value;render()};$("#moneyBtn").onclick=()=>{db.hideMoney=!db.hideMoney;save();render()};$("#productSearch").oninput=renderProducts;$("#categoryFilter").onchange=renderProducts;$("#saleSearch").oninput=renderSales;$("#applyReportBtn").onclick=renderReport;$("#applyDashPeriod").onclick=renderDashboard;$("#backToSalesBtn").onclick=()=>go("sales");
+});$("#settingsQuickBtn").onclick=()=>{if(!isVisitor())go("settings",true)};$("#accountBtn").onclick=()=>openModal("accountModal");$("#roleBadge").onclick=()=>openModal("accountModal");$("#visitorAccountBtn").onclick=()=>openModal("accountModal");$("#ordersQuickBtn").onclick=()=>{if(!isVisitor())go("orders",true)};$("#openAccountsBtn").onclick=()=>openModal("accountModal");$("#themeBtn").onclick=()=>{db.theme=db.theme==="dark"?"light":"dark";save();render()};$("#bellBtn").onclick=()=>$("#notifPanel").classList.toggle("open");$("#shopSelect").onchange=e=>{currentShop=e.target.value;render()};$("#moneyBtn").onclick=()=>{db.hideMoney=!db.hideMoney;save();render()};$("#productSearch").oninput=renderProducts;$("#categoryFilter").onchange=renderProducts;$("#saleSearch").oninput=renderSales;
+function recomputeSaleTotals(sale){
+  const usdTotal=(sale.items||[]).reduce((a,i)=>a+(Number(i.sell)||0)*(Number(i.qty)||0),0);
+  sale.usdEquivalent=usdTotal;
+  sale.paidTotal=sale.currency==="CDF"?usdTotal*(sale.rateUsed||db.rate):usdTotal;
+  sale.updatedAt=new Date().toISOString()
+}
+window.deleteReportItem=(saleId,productId)=>{
+  if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
+  const sale=db.sales.find(s=>s.id===saleId);if(!sale)return alert("Vente introuvable.");
+  const item=(sale.items||[]).find(i=>i.productId===productId);if(!item)return alert("Article introuvable.");
+  if(!confirm(`Supprimer ${item.name} × ${item.qty} de cette vente ? Le stock sera restauré.`))return;
+  const product=db.products.find(p=>p.id===productId);if(product)product.stock+=Number(item.qty)||0;
+  sale.items=sale.items.filter(i=>i.productId!==productId);
+  if(!sale.items.length)db.sales=db.sales.filter(s=>s.id!==saleId);else recomputeSaleTotals(sale);
+  queueSync("report.delete_item",{saleId,productId});notify("Correction rapport",`${item.name} retiré du rapport et stock restauré.`);save();render()
+};
+$("#resetReportFiltersBtn").onclick=()=>{$("#weekdayFilter").value="";$("#reportStart").value="";$("#reportEnd").value="";$("#reportShop").value="";renderReport()};
+$("#resetReportDataBtn").onclick=()=>{
+  if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
+  const rows=buildReportRows();const saleIds=[...new Set(rows.map(r=>r.sale.id))];
+  if(!saleIds.length)return alert("Aucune vente dans le rapport affiché.");
+  if(!confirm(`Réinitialiser le rapport affiché ? ${saleIds.length} vente(s) seront supprimée(s) et les stocks restaurés.`))return;
+  if(!confirm("Confirmation finale : continuer ?"))return;
+  const ids=new Set(saleIds);
+  db.sales.filter(s=>ids.has(s.id)).forEach(s=>(s.items||[]).forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=Number(i.qty)||0}));
+  db.sales=db.sales.filter(s=>!ids.has(s.id));
+  queueSync("report.reset",{saleIds});notify("Rapport réinitialisé",`${saleIds.length} vente(s) supprimée(s), stocks restaurés.`);save();render()
+};
+
+$("#applyReportBtn").onclick=renderReport;$("#applyDashPeriod").onclick=renderDashboard;$("#backToSalesBtn").onclick=()=>go("sales");
 $("#convertBtn").onclick=()=>{const u=Number($("#quickUsd").value),c=Number($("#quickCdf").value);if(u>0)$("#quickCdf").value=Math.round(usdToCdf(u));else if(c>0)$("#quickUsd").value=cdfToUsd(c).toFixed(2);else alert("Entrez un montant USD ou CDF.")};
 $("#periods").onclick=e=>{if(e.target.tagName!=="BUTTON")return;$$("#periods button").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");db.activePeriod=e.target.dataset.period;$("#customPeriod").style.display=db.activePeriod==="custom"?"flex":"none";save();renderDashboard()};
 
@@ -1105,9 +1166,10 @@ window.transferProduct=id=>{const p=db.products.find(x=>x.id===id),targets=db.sh
 $("#saveShopBtn").onclick=()=>{const n=$("#shopName").value.trim(),l=$("#shopLocation").value.trim();if(!n)return alert("Nom requis.");db.shops.push({id:uid("shop"),name:n,location:l||"Bukavu/Sud-Kivu"});queueSync("shop.create",{name:n});notify("Boutique ajoutée",`${n} créée.`);save();closeModals();render()};window.selectShop=id=>{currentShop=id;render();go("home")};
 function renderSellerChecks(){$("#sellerShopChecks").innerHTML=db.shops.map(s=>`<label style="display:block;margin:7px 0"><input type="checkbox" value="${s.id}" checked> ${esc(s.name)}</label>`).join("")}
 $("#saveSellerBtn").onclick=()=>{const n=$("#sellerName").value.trim(),e=$("#sellerEmail").value.trim(),shops=$$("#sellerShopChecks input:checked").map(x=>x.value);if(!n||!e||!shops.length)return alert("Informations incomplètes.");const code=String(Math.floor(100000+Math.random()*900000));
-db.users.push({id:uid("u"),name:n,email:e,password:null,accessCode:code,role:"seller",shops,permissions:defaultPermissionsForRole("seller"),status:"Actif",isPrimary:false,suspendedUntil:null});
-queueSync("staff.create",{email:e,role:"seller",shops});
-alert(`Compte créé. Code d’accès à remettre à ${n} : ${code}`);notify("Vendeur ajouté",`${n} ajouté.`);save();closeModals();render()};
+const role=$("#sellerRole").value;
+db.users.push({id:uid("u"),name:n,email:e,password:null,accessCode:code,role,shops,permissions:defaultPermissionsForRole(role),status:"Actif",isPrimary:false,suspendedUntil:null});
+queueSync("staff.create",{email:e,role,shops});
+alert(`Compte ${roleLabel(role)} créé. Code d’accès à remettre à ${n} : ${code}`);notify("Vendeur ajouté",`${n} ajouté.`);save();closeModals();render()};
 
 
 
@@ -1256,6 +1318,17 @@ body.admin-impersonating .masterbar{display:flex}
 .passwordWrap input{width:100%;padding-right:46px!important}
 .eyeBtn{position:absolute;right:7px;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:10px}
 .eyeBtn:hover{background:var(--soft)}
+
+
+.adPanel{margin:14px auto 20px;max-width:1220px;padding:0 18px}
+.adStage{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:22px;background:var(--card);min-height:150px;box-shadow:var(--shadow)}
+.adSlide{display:none;position:relative;min-height:150px}.adSlide.active{display:block}
+.adSlide img{width:100%;height:220px;object-fit:cover;display:block}
+.adCaption{position:absolute;left:14px;right:14px;bottom:14px;background:rgba(0,0,0,.62);color:white;padding:10px 12px;border-radius:14px;font-weight:800;backdrop-filter:blur(4px)}
+.adDots{display:flex;justify-content:center;gap:6px;margin-top:8px}.adDot{width:8px;height:8px;border-radius:999px;background:var(--line)}.adDot.active{background:var(--orange)}
+.adEmpty{padding:28px;text-align:center;color:var(--muted)}
+.adAdminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.adAdminCard{border:1px solid var(--line);border-radius:16px;padding:10px}.adAdminCard img{width:100%;height:110px;object-fit:cover;border-radius:12px}
+@media(max-width:700px){.adSlide img{height:160px}.adAdminGrid{grid-template-columns:1fr}}
 
 </style></head><body><h2>${title}</h2>${html}</body></html>`);w.document.close();w.print()}
 $("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("#recentSales").closest("table").outerHTML);$("#printReportBtn").onclick=()=>printTable("MKG-W4F — Rapport détaillé",$("#reportTable").closest("table").outerHTML);
