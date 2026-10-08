@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Map'sMédPren Mundu ku Gundi W4F</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v9 — Mot de passe administrateur</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -123,6 +123,12 @@ body.admin-impersonating .masterbar{display:flex}
 .publicHero .heroCard{background:linear-gradient(135deg,var(--soft),var(--card));border:1px solid var(--line);border-radius:26px;padding:22px}
 .codeRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media(max-width:720px){.publicHero{grid-template-columns:1fr}.permissionGrid{grid-template-columns:1fr}.netbadge span{display:none}}
+
+
+.passwordWrap{position:relative;display:flex;align-items:center}
+.passwordWrap input{width:100%;padding-right:46px!important}
+.eyeBtn{position:absolute;right:7px;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:10px}
+.eyeBtn:hover{background:var(--soft)}
 
 </style>
 </head>
@@ -268,8 +274,8 @@ body.admin-impersonating .masterbar{display:flex}
       <div class="field"><label>Email administrateur</label><input id="adminEmail" type="email"></div>
       <div class="field"><label>Téléphone / WhatsApp administrateur</label><input id="adminPhone"></div>
       <div class="field"><label>Statut du compte</label><input value="Actif" disabled></div>
-      <div class="field"><label>Nouveau mot de passe administrateur</label><input id="adminNewPassword" type="password" placeholder="Laisser vide pour ne pas modifier"></div>
-      <div class="field"><label>Confirmer le nouveau mot de passe</label><input id="adminConfirmPassword" type="password" placeholder="Confirmation"></div>
+      <div class="field"><label>Nouveau mot de passe administrateur</label><div class="passwordWrap"><input id="adminNewPassword" type="password" placeholder="Laisser vide pour ne pas modifier"><button type="button" class="eyeBtn" data-toggle-password="adminNewPassword" title="Afficher/masquer">👁</button></div></div>
+      <div class="field"><label>Confirmer le nouveau mot de passe</label><div class="passwordWrap"><input id="adminConfirmPassword" type="password" placeholder="Confirmation"><button type="button" class="eyeBtn" data-toggle-password="adminConfirmPassword" title="Afficher/masquer">👁</button></div></div>
     </div>
   </div>
   <div class="box">
@@ -502,7 +508,7 @@ body.admin-impersonating .masterbar{display:flex}
   <div class="formgrid">
     <div class="field"><label>Adresse email</label><input id="loginEmail" type="email" autocomplete="username" placeholder="votre@email.com"></div>
     <div class="field"><label>Type de connexion</label><select id="loginType"><option value="staff">Gérant / Vendeur — code d’accès</option><option value="admin">Administrateur — mot de passe</option></select></div>
-    <div class="field full"><label id="loginSecretLabel">Code d’accès</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Code reçu de l’administrateur"></div>
+    <div class="field full"><label id="loginSecretLabel">Code d’accès</label><div class="passwordWrap"><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Code reçu de l’administrateur"><button type="button" class="eyeBtn" data-toggle-password="loginPassword" title="Afficher/masquer">👁</button></div></div>
   </div>
   <div id="loginMessage" class="notice" style="display:none;margin-top:12px"></div>
   <div class="actions"><button class="btn alt" id="stayVisitorBtn">Continuer comme visiteur</button><button class="btn" id="loginBtn">Se connecter</button></div>
@@ -525,7 +531,7 @@ const seed={
   adminProfile:{name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",phone:""},
   shops:[{id:"main",name:"Boutique principale",location:"ISP, Bukavu/Sud-Kivu"}],
   users:[
-    {id:"u-admin",name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",password:"Mapenzind02@",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null},
+    {id:"u-admin",name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",password:"202020",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null},
     {id:"u-seller",name:"Vendeur 1",email:"vendeur1@mkg.local",password:null,accessCode:"482731",role:"seller",shops:["main"],permissions:["sales.create","sales.own","orders.waiting","orders.own","products.view"],status:"Actif",isPrimary:false,suspendedUntil:null}
   ],
   products:[
@@ -541,7 +547,7 @@ const seed={
   notifications:[{id:"n1",title:"Stock faible",body:"iPhone 11 : 2 unités restantes",date:new Date().toISOString(),read:false}]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v8"))||clone(seed)}catch(e){db=clone(seed)}
+let db;try{db=JSON.parse(localStorage.getItem("mkg-full-v9"))||clone(seed)}catch(e){db=clone(seed)}
 if(!db.orders) db.orders=[];
 if(!db.syncQueue) db.syncQueue=[];
 if(!("lastSyncAt" in db)) db.lastSyncAt=null;
@@ -563,17 +569,17 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const orderChannel=("BroadcastChannel" in window)?new BroadcastChannel("mkg-w4f-orders"):null;
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v8"&&e.newValue){
+  if(e.key==="mkg-full-v9"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
-if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v8"));if(fresh){db=fresh;render()}}catch(e){}};
+if(orderChannel)orderChannel.onmessage=()=>{try{const fresh=JSON.parse(localStorage.getItem("mkg-full-v9"));if(fresh){db=fresh;render()}}catch(e){}};
 
-function save(){localStorage.setItem("mkg-full-v8",JSON.stringify(db));broadcastOrders()}
+function save(){localStorage.setItem("mkg-full-v9",JSON.stringify(db));broadcastOrders()}
 function queueSync(type,payload={}){
   if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
   db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
-  localStorage.setItem("mkg-full-v8",JSON.stringify(db));broadcastOrders()
+  localStorage.setItem("mkg-full-v9",JSON.stringify(db));broadcastOrders()
 }
 async function syncPending(){
   if(!navigator.onLine){alert("Connexion Internet requise pour synchroniser.");renderNetwork();return}
@@ -1063,6 +1069,12 @@ body.admin-impersonating .masterbar{display:flex}
 .codeRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 @media(max-width:720px){.publicHero{grid-template-columns:1fr}.permissionGrid{grid-template-columns:1fr}.netbadge span{display:none}}
 
+
+.passwordWrap{position:relative;display:flex;align-items:center}
+.passwordWrap input{width:100%;padding-right:46px!important}
+.eyeBtn{position:absolute;right:7px;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:10px}
+.eyeBtn:hover{background:var(--soft)}
+
 </style></head><body><h2>${title}</h2>${html}</body></html>`);w.document.close();w.print()}
 $("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("#recentSales").closest("table").outerHTML);$("#printReportBtn").onclick=()=>printTable("MKG-W4F — Rapport détaillé",$("#reportTable").closest("table").outerHTML);
 
@@ -1228,6 +1240,16 @@ $("#confirmFinalizeOrderBtn").onclick=()=>{
   o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:`Commande finalisée. Reçu ${s.receipt}. Merci pour votre confiance.`,at:new Date().toISOString()});
   currentReceiptSaleId=s.id;queueSync("order.finalize",{orderId:o.id,saleId:s.id});notify("Commande finalisée",`${o.code} finalisée par ${u.name}.`);save();closeModals();render();showReceipt(s.id)
 };
+
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-toggle-password]");
+  if(!b)return;
+  const input=$("#"+b.dataset.togglePassword);
+  if(!input)return;
+  input.type=input.type==="password"?"text":"password";
+  b.textContent=input.type==="password"?"👁":"🙈";
+});
 
 render();
 </script>
