@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v18 — Publicités, gérant & correction rapports</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v19 — Correctif erreur & stabilité</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -589,7 +589,7 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v18";
+const STORAGE_KEY="mkg-full-v19";
 let memoryStore=null;
 function storageGet(){
   try{
@@ -628,7 +628,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v18"&&e.newValue){
+  if(e.key==="mkg-full-v19"&&e.newValue){
     try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
   }
 });
@@ -997,8 +997,8 @@ window.deleteReportItem=(saleId,productId)=>{
   if(!sale.items.length)db.sales=db.sales.filter(s=>s.id!==saleId);else recomputeSaleTotals(sale);
   queueSync("report.delete_item",{saleId,productId});notify("Correction rapport",`${item.name} retiré du rapport et stock restauré.`);save();render()
 };
-$("#resetReportFiltersBtn").onclick=()=>{$("#weekdayFilter").value="";$("#reportStart").value="";$("#reportEnd").value="";$("#reportShop").value="";renderReport()};
-$("#resetReportDataBtn").onclick=()=>{
+if($("#resetReportFiltersBtn")) $("#resetReportFiltersBtn").onclick=()=>{$("#weekdayFilter").value="";$("#reportStart").value="";$("#reportEnd").value="";$("#reportShop").value="";renderReport()};
+if($("#resetReportDataBtn")) $("#resetReportDataBtn").onclick=()=>{
   if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
   const rows=buildReportRows();const saleIds=[...new Set(rows.map(r=>r.sale.id))];
   if(!saleIds.length)return alert("Aucune vente dans le rapport affiché.");
@@ -1166,7 +1166,7 @@ window.transferProduct=id=>{const p=db.products.find(x=>x.id===id),targets=db.sh
 $("#saveShopBtn").onclick=()=>{const n=$("#shopName").value.trim(),l=$("#shopLocation").value.trim();if(!n)return alert("Nom requis.");db.shops.push({id:uid("shop"),name:n,location:l||"Bukavu/Sud-Kivu"});queueSync("shop.create",{name:n});notify("Boutique ajoutée",`${n} créée.`);save();closeModals();render()};window.selectShop=id=>{currentShop=id;render();go("home")};
 function renderSellerChecks(){$("#sellerShopChecks").innerHTML=db.shops.map(s=>`<label style="display:block;margin:7px 0"><input type="checkbox" value="${s.id}" checked> ${esc(s.name)}</label>`).join("")}
 $("#saveSellerBtn").onclick=()=>{const n=$("#sellerName").value.trim(),e=$("#sellerEmail").value.trim(),shops=$$("#sellerShopChecks input:checked").map(x=>x.value);if(!n||!e||!shops.length)return alert("Informations incomplètes.");const code=String(Math.floor(100000+Math.random()*900000));
-const role=$("#sellerRole").value;
+const role=$("#sellerRole")?.value||"seller";
 db.users.push({id:uid("u"),name:n,email:e,password:null,accessCode:code,role,shops,permissions:defaultPermissionsForRole(role),status:"Actif",isPrimary:false,suspendedUntil:null});
 queueSync("staff.create",{email:e,role,shops});
 alert(`Compte ${roleLabel(role)} créé. Code d’accès à remettre à ${n} : ${code}`);notify("Vendeur ajouté",`${n} ajouté.`);save();closeModals();render()};
@@ -1506,17 +1506,21 @@ document.addEventListener("click",e=>{
   b.textContent=input.type==="password"?"👁":"🙈";
 });
 
-window.addEventListener("error",()=>{const e=document.getElementById("appError");if(e)e.style.display="block"});
-window.addEventListener("unhandledrejection",()=>{const e=document.getElementById("appError");if(e)e.style.display="block"});
 if("serviceWorker" in navigator){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
 }
 try{
   render();
   routeFromHash();
+  const e=document.getElementById("appError");
+  if(e)e.style.display="none";
 }catch(err){
-  console.error(err);
-  const e=document.getElementById("appError");if(e)e.style.display="block";
+  console.error("Erreur initialisation MKG-W4F:",err);
+  const e=document.getElementById("appError");
+  if(e){
+    e.style.display="block";
+    e.textContent="Une erreur de démarrage a été détectée. Rechargez la page après avoir remplacé tous les fichiers par la dernière version.";
+  }
 }
 </script>
 </body></html>
