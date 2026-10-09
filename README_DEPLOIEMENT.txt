@@ -1,17 +1,26 @@
-MKG-W4F M'MEDPREN v23 — MongoDB Sync
+MKG-W4F M'MEDPREN v24 — Correctif synchronisation & rapidité
 
-Déploiement Vercel:
-1. Garder MONGODB_URI dans Settings > Environment Variables (Production + Preview).
-2. Recommandé: ajouter ADMIN_PASSWORD=202020 et ADMIN_EMAIL=ndagonywaphilemon@gmail.com dans Vercel.
-3. Remplacer tous les fichiers du projet par ceux de ce dossier, y compris api/sync.js et package.json.
-4. Déployer / Redeploy. Vercel installera automatiquement le package mongodb.
-5. MongoDB Atlas > Network Access doit autoriser les connexions de Vercel (pour un premier test: 0.0.0.0/0).
-6. Connectez-vous comme administrateur puis cliquez Synchroniser maintenant une première fois pour initialiser MongoDB avec l'état de l'application.
+CORRECTIONS PRINCIPALES
+- Migration automatique des données locales depuis v21/v23 vers v24.
+- L'administrateur déjà connecté recrée automatiquement ses informations de synchronisation.
+- Le bouton "Synchroniser maintenant" force une vraie confirmation MongoDB.
+- L'heure de synchronisation n'est mise à jour qu'après confirmation du serveur.
+- L'interface affiche la révision MongoDB réelle (r1, r2, ...).
+- Les erreurs de synchronisation sont affichées clairement.
+- Les opérations hors connexion restent en file et repartent au retour d'Internet.
 
-Fonctionnement:
-- Les données restent locales hors connexion.
-- Les changements sont poussés automatiquement au retour d'Internet.
-- Les autres appareils récupèrent les changements toutes les ~7 secondes quand l'application est ouverte.
-- Les visiteurs reçoivent le catalogue/publicités et retrouvent leurs propres commandes.
-- La prise en charge d'une commande est atomique côté MongoDB et nécessite Internet.
-- Les images sont compressées avant synchronisation pour limiter l'espace Atlas.
+PERFORMANCES
+- Vérification légère de la révision serveur toutes les ~4 secondes.
+- La base complète n'est téléchargée que si la révision a réellement changé.
+- Une sauvegarde locale sans changement en attente ne déclenche plus un POST complet.
+- Délai automatique de push réduit à ~450 ms.
+- Timeout réseau pour éviter les écrans bloqués.
+
+DEPLOIEMENT
+1. Conserver MONGODB_URI dans Vercel.
+2. Remplacer TOUS les fichiers de la v23, notamment index.html, sw.js et api/sync.js.
+3. Vérifier que sync.js est bien dans le dossier api/.
+4. Commit / déployer sur la branche Production.
+5. Ouvrir l'application, se connecter administrateur, puis cliquer une fois "Synchroniser maintenant".
+6. Le message attendu est : "Synchronisation MongoDB réussie · serveur r1" (ou supérieur).
+7. Vérifier ensuite /api/sync?scope=public : revision doit être > 0.
