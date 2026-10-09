@@ -648,13 +648,25 @@ function scheduleAutoSync(){
   clearTimeout(syncTimer);
   syncTimer=setTimeout(()=>syncPending({silent:true}),900)
 }
+function stripMongoIds(value){
+  if(Array.isArray(value))return value.map(stripMongoIds);
+  if(value&&typeof value==="object"){
+    const out={};
+    for(const [k,v] of Object.entries(value)){
+      if(k==="_id")continue;
+      out[k]=stripMongoIds(v)
+    }
+    return out
+  }
+  return value
+}
 function sharedState(){
-  return {
+  return stripMongoIds({
     rate:db.rate,mainCurrency:db.mainCurrency,hideMoney:db.hideMoney,
     shopSettings:db.shopSettings,adminProfile:db.adminProfile,
     shops:db.shops||[],users:db.users||[],products:db.products||[],ads:db.ads||[],
     sales:db.sales||[],orders:db.orders||[],notifications:db.notifications||[]
-  }
+  })
 }
 function preserveLocalSecrets(nextUsers){
   const existing=new Map((db.users||[]).map(u=>[u.id,u]));
@@ -665,6 +677,7 @@ function preserveLocalSecrets(nextUsers){
 }
 function applyRemoteState(remote,scope="private"){
   if(!remote)return;
+  remote=stripMongoIds(remote);
   if(remote.rate!=null)db.rate=remote.rate;
   if(remote.mainCurrency)db.mainCurrency=remote.mainCurrency;
   if(remote.shopSettings)db.shopSettings=remote.shopSettings;
