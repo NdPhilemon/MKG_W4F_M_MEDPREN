@@ -96,6 +96,10 @@ export default async function handler(req,res){
     const db=await database();
     if(req.method==="GET"){
       const scope=String(req.query.scope||"public");
+      if(scope==="revision"){
+        const m=await meta(db);
+        return json(res,200,{ok:true,revision:Number(m.revision||0),updatedAt:m.updatedAt||null})
+      }
       if(scope==="public"){const m=await meta(db);return json(res,200,{ok:true,revision:Number(m.revision||0),state:await publicState(db,String(req.query.visitorSessionId||""))})}
       const a={email:req.headers["x-sync-email"],secret:req.headers["x-sync-secret"],type:req.headers["x-sync-type"]};const au=await auth(db,a);if(!au)return json(res,401,{ok:false,error:"Authentification requise"});const m=await meta(db);return json(res,200,{ok:true,revision:Number(m.revision||0),state:await privateState(db,au.role,au.user)})
     }
@@ -111,9 +115,11 @@ export default async function handler(req,res){
       if(!upd)return json(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump(db);return json(res,200,{ok:true,revision,order:upd})
     }
     if(body.action==="sync"){
-      if(au.role==="admin")await writeAdminState(db,body.state||{},body.operations||[]);else await writeStaffState(db,body.state||{},au.role,au.user);
-      const revision=await bump(db);return json(res,200,{ok:true,revision,state:await privateState(db,au.role,au.user)})
+      if(au.role==="admin")await writeAdminState(db,body.state||{},body.operations||[]);
+      else await writeStaffState(db,body.state||{},au.role,au.user);
+      const revision=await bump(db);
+      return json(res,200,{ok:true,revision,state:await privateState(db,au.role,au.user)})
     }
     return json(res,400,{ok:false,error:"Action inconnue"})
   }catch(e){console.error("SYNC_API",e);return json(res,e.status||500,{ok:false,error:e.status?e.message:"Erreur serveur de synchronisation"})}
-      }
+}
