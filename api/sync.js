@@ -139,4 +139,4 @@ export default async function handler(req,res){
     }
     return json(res,400,{ok:false,error:"Action inconnue"})
   }catch(e){console.error("SYNC_API",e);return json(res,e.status||500,{ok:false,error:e.status?e.message:"Erreur serveur de synchronisation"})}
-}
+    }
