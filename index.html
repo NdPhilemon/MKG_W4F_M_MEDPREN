@@ -151,6 +151,8 @@ body.admin-impersonating .masterbar{display:flex}
 .adAdminGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.adAdminCard{border:1px solid var(--line);border-radius:16px;padding:10px}.adAdminCard img{width:100%;height:110px;object-fit:cover;border-radius:12px}
 @media(max-width:700px){.adSlide img{height:160px}.adAdminGrid{grid-template-columns:1fr}}
 
+
+#syncNowBtn{display:none!important}
 </style>
 </head>
 <body>
@@ -343,7 +345,7 @@ body.admin-impersonating .masterbar{display:flex}
     <div class="syncbox">
       <span id="syncQueueCount" class="pill">0 en attente</span>
       <span id="lastSyncLabel" class="muted">Jamais synchronisé</span>
-      <button id="syncNowBtn" class="btn">Synchroniser maintenant</button>
+      <span id="syncAutoStatus" class="tiny muted">Synchronisation automatique</span>
     </div>
   </div>
 
@@ -584,8 +586,8 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v26";
-const LEGACY_STORAGE_KEYS=["mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
+const STORAGE_KEY="mkg-full-v28";
+const LEGACY_STORAGE_KEYS=["mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
 function storageGet(){
   try{
@@ -626,32 +628,33 @@ db.shopSettings.phone=db.shopSettings.phone||"0974112163";
 db.shopSettings.rccm=db.shopSettings.rccm||"CD/BKV/RCCM/24-A-01446";
 db.shopSettings.receiptLocation=db.shopSettings.receiptLocation||"ISP, Bukavu/Sud-Kivu";
 db.shopSettings.correctionWindowMin=Math.max(1,Number(db.shopSettings.correctionWindowMin)||10);
+restoreSession();
 let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key==="mkg-full-v23"&&e.newValue){
-    try{const fresh=JSON.parse(e.newValue);db=fresh;render()}catch(err){}
+  if(e.key===STORAGE_KEY&&e.newValue){
+    try{mergeBusinessDataPreservingSession(JSON.parse(e.newValue));render();go(routeForSession(currentRoute()),false)}catch(err){}
   }
 });
-if(orderChannel)orderChannel.onmessage=()=>{try{const raw=storageGet();const fresh=raw?JSON.parse(raw):null;if(fresh){db=fresh;render()}}catch(e){}};
+if(orderChannel)orderChannel.onmessage=()=>{try{const raw=storageGet();const fresh=raw?JSON.parse(raw):null;if(fresh){mergeBusinessDataPreservingSession(fresh);render();go(routeForSession(currentRoute()),false)}}catch(e){}};
 
 let syncTimer=null,syncInProgress=false,pullTimer=null;
 function save(schedule=true){
-  storageSet(JSON.stringify(db));broadcastOrders();
+  persistBusinessState();saveSession();broadcastOrders();
   if(schedule&&navigator.onLine)scheduleAutoSync()
 }
 function queueSync(type,payload={}){
   if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
   db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
-  storageSet(JSON.stringify(db));broadcastOrders();
+  persistBusinessState();saveSession();broadcastOrders();
   if(navigator.onLine)scheduleAutoSync()
 }
 function scheduleAutoSync(){
   clearTimeout(syncTimer);
-  syncTimer=setTimeout(()=>syncPending({silent:true}),900)
+  syncTimer=setTimeout(()=>syncPending({silent:true}),300)
 }
 function stripMongoIds(value){
   if(Array.isArray(value))return value.map(stripMongoIds);
@@ -682,6 +685,7 @@ function preserveLocalSecrets(nextUsers){
 }
 function applyRemoteState(remote,scope="private"){
   if(!remote)return;
+  const __session=sessionSnapshot();
   remote=stripMongoIds(remote);
   if(remote.rate!=null)db.rate=remote.rate;
   if(remote.mainCurrency)db.mainCurrency=remote.mainCurrency;
@@ -700,6 +704,7 @@ function applyRemoteState(remote,scope="private"){
     const ownIds=new Set(remote.orders.map(o=>o.id));
     db.orders=[...(db.orders||[]).filter(o=>o.visitorSessionId!==db.visitorSessionId||!ownIds.has(o.id)),...remote.orders]
   }
+  restoreSessionSnapshot(__session);
 }
 function privateHeaders(){
   const a=db.syncAuth;
@@ -713,7 +718,7 @@ async function apiJson(url,options={}){
 }
 
 async function refreshPublicCatalog(){
-  if(!navigator.onLine)return false;
+  if(!isVisitor()||!navigator.onLine)return false;
   try{
     const data=await apiJson(`/api/sync?scope=public&visitorSessionId=${encodeURIComponent(db.visitorSessionId||"")}`,{method:"GET"});
     if(data?.state){
@@ -775,17 +780,20 @@ async function claimOrderRemote(orderId){
   }
   return data.order
 }
-function startRemotePolling(){
-  if(pullTimer)clearInterval(pullTimer);
-  pullTimer=setInterval(()=>{
-    if(document.visibilityState!=="visible"||!navigator.onLine)return;
-    const hasPending=db.syncQueue.some(x=>x.status==="pending");
-    hasPending?syncPending({silent:true}):pullRemote({silent:true})
-  },7000)
+async function checkRemoteRevision(){
+  if(document.visibilityState!=="visible"||!navigator.onLine||syncInProgress)return;
+  const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
+  if(pending){await syncPending({silent:true});return}
+  try{
+    const r=await apiJson("/api/sync?scope=revision",{method:"GET"});
+    const rev=Number(r.revision||0);
+    if(rev!==Number(db.serverRevision||0))await pullRemote({silent:true});
+  }catch(e){}
 }
-window.addEventListener("online",()=>{renderNetwork();renderSync();syncPending({silent:true})});
+function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,3000)}
+window.addEventListener("online",()=>{renderNetwork();renderSync();setTimeout(async()=>{const pending=(db.syncQueue||[]).some(x=>x.status==="pending");if(pending)await syncPending({silent:true});await checkRemoteRevision()},150)});
 window.addEventListener("offline",()=>{renderNetwork();renderSync()});
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)pullRemote({silent:true})});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)checkRemoteRevision()});
 startRemotePolling();
 function uid(p="id"){return p+"-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6)}
 
@@ -817,6 +825,34 @@ function hasPermission(key){
 }
 function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
 function isVisitor(){return db.sessionType==="visitor"}
+
+const SESSION_KEY="mkg-session-v28";
+function sessionSnapshot(){return {sessionType:db.sessionType,currentUserId:db.currentUserId,impersonatedByAdminId:db.impersonatedByAdminId,role:db.role,syncAuth:db.syncAuth?{...db.syncAuth}:null}}
+function restoreSessionSnapshot(s){if(!s)return;db.sessionType=s.sessionType;db.currentUserId=s.currentUserId;db.impersonatedByAdminId=s.impersonatedByAdminId;db.role=s.role;db.syncAuth=s.syncAuth}
+function saveSession(){try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(sessionSnapshot()))}catch(e){}}
+function clearSession(){try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}}
+function restoreSession(){try{const s=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");if(s?.sessionType==="internal"&&s.currentUserId)restoreSessionSnapshot(s)}catch(e){}}
+function businessSnapshot(){
+  const out=stripMongoIds?stripMongoIds(db):JSON.parse(JSON.stringify(db));
+  delete out.sessionType;delete out.currentUserId;delete out.impersonatedByAdminId;delete out.role;delete out.syncAuth;
+  return out
+}
+function persistBusinessState(){storageSet(JSON.stringify(businessSnapshot()))}
+function mergeBusinessDataPreservingSession(fresh){
+  const s=sessionSnapshot();
+  // Session/auth belongs to this tab only and must never come from localStorage/MongoDB.
+  const keepVisitorSessionId=db.visitorSessionId;
+  db=fresh;
+  db.visitorSessionId=db.visitorSessionId||keepVisitorSessionId||null;
+  restoreSessionSnapshot(s);
+}
+function currentRoute(){return (location.hash||"").replace(/^#/,"")|| (isVisitor()?"storefront":"home")}
+function routeForSession(id){
+  if(isVisitor()) return ["storefront","visitorChat"].includes(id)?id:"storefront";
+  if(["storefront","visitorChat"].includes(id)) return "home";
+  return id;
+}
+
 function canSeeAllOrders(){return isTrueAdmin()}
 function orderStatusLabel(s){return s==="waiting"?"En attente":s==="claimed"?"Prise en charge":s==="completed"?"Finalisée":s==="cancelled"?"Annulée":s}
 function orderTotalUsd(o){return (o.items||[]).reduce((a,i)=>a+i.sell*i.qty,0)}
@@ -846,11 +882,16 @@ function renderNetwork(){
   $("#networkBadge").innerHTML=online?"● <span>En ligne</span>":"● <span>Hors connexion</span>";
 }
 function renderSync(){
-  if(!$("#syncQueueCount"))return;
-  const pending=db.syncQueue.filter(x=>x.status==="pending").length;
-  $("#syncQueueCount").textContent=`${pending} en attente`;
-  $("#lastSyncLabel").textContent=syncInProgress?"Synchronisation…":db.lastSyncAt?`Dernière synchro : ${displayDate(db.lastSyncAt)}`:"Jamais synchronisé";
-  $("#syncNowBtn").disabled=!navigator.onLine||syncInProgress
+  const count=$("#syncQueueCount"),label=$("#lastSyncLabel");
+  const pending=(db.syncQueue||[]).filter(x=>x.status==="pending").length;
+  if(count)count.textContent=pending?`${pending} à envoyer`:"À jour";
+  if(label){
+    if(syncInProgress)label.textContent="Synchronisation automatique…";
+    else if(!navigator.onLine)label.textContent="Hors connexion · sauvegarde locale active";
+    else if(db.lastSyncError)label.textContent=`Nouvel essai automatique · ${db.lastSyncError}`;
+    else if(db.lastSyncAt)label.textContent=`Synchronisé automatiquement · ${displayDate(db.lastSyncAt)} · r${db.serverRevision||0}`;
+    else label.textContent="Synchronisation automatique active";
+  }
 }
 
 function render(){
@@ -882,8 +923,11 @@ function render(){
  if(isVisitor()){
    renderStorefront();renderVisitorChat();
    const activePanel=$(".panel.active");
-   if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront");if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100);
+   if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront",false);
+   if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100);
  }else{
+   const activePanel=$(".panel.active");
+   if(!activePanel||["storefront","visitorChat"].includes(activePanel.id))go("home",false);
    if(!isAdmin()&&$("#reports").classList.contains("active"))go("home");
    if(!isTrueAdmin()&&$("#settings").classList.contains("active"))go("home");
  }
@@ -1111,12 +1155,11 @@ function allowedPage(id){
   return id
 }
 function go(id,updateHash=true){
+  id=routeForSession(id);
   id=allowedPage(id);
   $$(".panel").forEach(p=>p.classList.toggle("active",p.id===id));
   $$(".nav").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
-  if(updateHash && location.hash!==`#${id}`){
-    try{history.replaceState(null,"",`#${id}`)}catch(e){location.hash=id}
-  }
+  if(updateHash && location.hash!==`#${id}`){try{history.replaceState(null,"",`#${id}`)}catch(e){location.hash=id}}
   window.scrollTo({top:0,behavior:"smooth"})
 }
 function routeFromHash(){
@@ -1323,10 +1366,11 @@ alert(`Compte ${roleLabel(role)} créé. Code d’accès à remettre à ${n} : $
 
 
 window.enterVisitorMode=()=>{
-  db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";db.syncAuth=null;
+  db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";db.syncAuth=null;clearSession();
   if(!db.visitorSessionId) db.visitorSessionId=uid("visitor");
   currentShop="main";
-  save();closeModals();render();go("storefront",true)
+  save(false);closeModals();render();go("storefront",true);
+  if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100)
 };
 
 $("#loginType").onchange=()=>{
@@ -1357,9 +1401,14 @@ $("#loginBtn").onclick=async()=>{
   }
   if(!localOk){$("#loginMessage").textContent=navigator.onLine?"Email, mot de passe ou code d’accès incorrect.":"Identifiants non reconnus hors connexion sur cet appareil.";$("#loginMessage").style.display="block";return}
   if(isSuspended(u)){$("#loginMessage").textContent=`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`;$("#loginMessage").style.display="block";return}
-  db.syncAuth={email,secret,type};db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";
+  db.syncAuth={email,secret,type};db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";saveSession();
   save(false);closeModals();render();go("home",true);
-  if(navigator.onLine)await syncPending({silent:true})
+  if(navigator.onLine){
+    const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
+    if(pending)await syncPending({silent:true});
+    else await pullRemote({silent:true});
+    render();go(routeForSession(currentRoute()),false)
+  }
 };
 
 
@@ -1372,7 +1421,6 @@ $("#resetReceiptSettingsBtn").onclick=()=>{
   $("#correctionWindowInput").value=10;
 };
 
-$("#syncNowBtn").onclick=syncPending;
 $("#saveSettingsBtn").onclick=()=>{
   if(!isTrueAdmin())return alert("Accès réservé à l’administrateur.");
   const newPhone=$("#shopPhoneInput").value.trim();
@@ -1740,7 +1788,15 @@ if("serviceWorker" in navigator){
 try{
   render();
   routeFromHash();
-  if(navigator.onLine)setTimeout(()=>isVisitor()?refreshPublicCatalog():db.syncAuth&&syncPending({silent:true}),250);
+  if(navigator.onLine)setTimeout(async()=>{
+    if(isVisitor())await refreshPublicCatalog();
+    else{
+      const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
+      if(pending)await syncPending({silent:true});
+      else await pullRemote({silent:true}).catch(()=>{});
+      render();go(routeForSession(currentRoute()),false)
+    }
+  },200);
 }catch(err){
   console.error("Erreur initialisation MKG-W4F:",err);
 }

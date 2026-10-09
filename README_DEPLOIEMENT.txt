@@ -1,16 +1,14 @@
-MKG-W4F M'MEDPREN v26 — Correctif catalogue visiteur
+MKG-W4F M'MEDPREN v28 — Stable Auto Sync
 
-Cause corrigée :
-Le produit existait bien dans MongoDB, mais le visiteur pouvait garder une copie locale vide.
-La page considérait parfois la synchronisation déjà à jour et n'allait pas recharger le catalogue public.
+Corrections vérifiées:
+- session par onglet via sessionStorage; un onglet Visiteur ne peut plus déconnecter un onglet Admin;
+- événements localStorage/BroadcastChannel fusionnent uniquement les données métier et préservent la session;
+- navigation protégée avec la bonne variable id;
+- synchronisation manuelle retirée;
+- modifications envoyées automatiquement après ~300 ms;
+- retour Internet = envoi automatique;
+- vérification légère de revision MongoDB toutes les ~3 s, pull complet uniquement si la revision change;
+- catalogue public rafraîchi uniquement en mode Visiteur.
 
-v26 :
-- force la récupération publique au démarrage visiteur ;
-- retente automatiquement si la liste locale est vide ;
-- rafraîchit immédiatement après passage en mode visiteur ;
-- tolère stock/prix reçus comme nombres ou chaînes ;
-- change le cache PWA vers v26 ;
-- migre les anciennes données locales v21-v25.
-
-Déploiement :
-Remplacer index.html et sw.js, ou importer tout le ZIP.
+- La session et syncAuth ne sont plus enregistrées dans localStorage partagé.
+- À la connexion interne, l'application récupère d'abord l'état MongoDB si aucune opération locale n'est en attente, évitant d'écraser le serveur avec un état public/stale.
