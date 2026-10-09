@@ -1,18 +1,16 @@
-MKG-W4F M'MEDPREN v25 — Synchronisation MongoDB stable
+MKG-W4F M'MEDPREN v26 — Correctif catalogue visiteur
 
-Correction principale :
-MongoDB ajoute un champ interne `_id`. La v24 pouvait le récupérer puis le renvoyer à MongoDB,
-ce qui provoquait une erreur lors des synchronisations suivantes.
+Cause corrigée :
+Le produit existait bien dans MongoDB, mais le visiteur pouvait garder une copie locale vide.
+La page considérait parfois la synchronisation déjà à jour et n'allait pas recharger le catalogue public.
 
-La v25 :
-- retire `_id` de toutes les réponses API ;
-- retire `_id` avant toutes les écritures ;
-- nettoie les anciennes données locales ;
-- garde les opérations hors connexion en file en cas d'erreur.
+v26 :
+- force la récupération publique au démarrage visiteur ;
+- retente automatiquement si la liste locale est vide ;
+- rafraîchit immédiatement après passage en mode visiteur ;
+- tolère stock/prix reçus comme nombres ou chaînes ;
+- change le cache PWA vers v26 ;
+- migre les anciennes données locales v21-v25.
 
 Déploiement :
-1. Remplacer index.html, sw.js et api/sync.js.
-2. Commit sur la branche Production.
-3. Attendre Vercel.
-4. Cliquer Synchroniser maintenant.
-5. Vérifier que /api/sync?scope=public montre une revision qui augmente.
+Remplacer index.html et sw.js, ou importer tout le ZIP.

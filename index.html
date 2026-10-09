@@ -584,12 +584,17 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v23";
+const STORAGE_KEY="mkg-full-v26";
+const LEGACY_STORAGE_KEYS=["mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
 function storageGet(){
   try{
     const raw=window.localStorage.getItem(STORAGE_KEY);
     if(raw) return raw;
+    for(const key of LEGACY_STORAGE_KEYS){
+      const legacy=window.localStorage.getItem(key);
+      if(legacy)return legacy;
+    }
   }catch(e){}
   return memoryStore;
 }
@@ -705,6 +710,22 @@ async function apiJson(url,options={}){
   const data=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
   if(!r.ok)throw Object.assign(new Error(data.error||`HTTP ${r.status}`),{status:r.status,data});
   return data
+}
+
+async function refreshPublicCatalog(){
+  if(!navigator.onLine)return false;
+  try{
+    const data=await apiJson(`/api/sync?scope=public&visitorSessionId=${encodeURIComponent(db.visitorSessionId||"")}`,{method:"GET"});
+    if(data?.state){
+      applyRemoteState(data.state,"public");
+      db.serverRevision=Number(data.revision||db.serverRevision||0);
+      db.lastPullAt=new Date().toISOString();
+      save(false);
+      if(typeof renderStorefront==="function")renderStorefront();
+      return true
+    }
+  }catch(e){}
+  return false
 }
 async function pullRemote({silent=true}={}){
   if(!navigator.onLine||syncInProgress)return false;
@@ -861,7 +882,7 @@ function render(){
  if(isVisitor()){
    renderStorefront();renderVisitorChat();
    const activePanel=$(".panel.active");
-   if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront");
+   if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront");if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100);
  }else{
    if(!isAdmin()&&$("#reports").classList.contains("active"))go("home");
    if(!isTrueAdmin()&&$("#settings").classList.contains("active"))go("home");
@@ -909,7 +930,7 @@ function renderProducts(){
  $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-p.buy,stockProfit=pu*p.stock;return`<tr>
  <td><div class="product">${p.photo?`<img class="thumb" src="${p.photo}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
  <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(usdToCdf(p.buy),"CDF"):fmt(p.buy)}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(p.buy):fmt(usdToCdf(p.buy),"CDF")}</td>
- <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(p.sell),"CDF"):fmt(p.sell)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
+ <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(Number(p.sell)||0),"CDF"):fmt(Number(p.sell)||0)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
  <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td>
  <td class="adminOnly"><span class="pill ${p.visibleToVisitors===false?"red":"green"}">${p.visibleToVisitors===false?"Retiré":"Visible"}</span></td>
  <td class="adminOnly nowrap">
@@ -1477,7 +1498,11 @@ $("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("
 
 function renderStorefront(){
   const q=($("#storeSearch")?.value||"").toLowerCase(),cat=$("#storeCategory")?.value||"";
-  const items=db.products.filter(p=>p.shopId==="main"&&p.stock>0&&p.visibleToVisitors!==false&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
+  if(isVisitor()&&navigator.onLine&&(!db.products||!db.products.some(p=>p.shopId==="main"&&Number(p.stock)>0&&p.visibleToVisitors!==false))){
+    clearTimeout(window.__publicRetry);
+    window.__publicRetry=setTimeout(()=>refreshPublicCatalog(),250);
+  }
+  const items=db.products.filter(p=>p.shopId==="main"&&Number(p.stock)>0&&p.visibleToVisitors!==false&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
   $("#storeGrid").innerHTML=items.map(p=>`<div class="storeitem">
     ${p.photo?`<img src="${p.photo}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
     <h3>${esc(p.name)}</h3><div class="tiny">${esc(p.category)} · stock ${p.stock}</div>
@@ -1715,7 +1740,7 @@ if("serviceWorker" in navigator){
 try{
   render();
   routeFromHash();
-  if(navigator.onLine)setTimeout(()=>isVisitor()?pullRemote({silent:true}):db.syncAuth&&syncPending({silent:true}),300);
+  if(navigator.onLine)setTimeout(()=>isVisitor()?refreshPublicCatalog():db.syncAuth&&syncPending({silent:true}),250);
 }catch(err){
   console.error("Erreur initialisation MKG-W4F:",err);
 }
