@@ -14,8 +14,22 @@ async function database(){
 const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"ndagonywaphilemon@gmail.com").toLowerCase();
 const ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"202020";
 const COLLECTIONS=["shops","users","products","ads","sales","orders","notifications"];
+
+function stripMongo(value){
+  if(Array.isArray(value))return value.map(stripMongo);
+  if(value&&typeof value==="object"){
+    const out={};
+    for(const [k,v] of Object.entries(value)){
+      if(k==="_id")continue;
+      out[k]=stripMongo(v)
+    }
+    return out
+  }
+  return value
+}
+
 const publicProduct=p=>p&&p.visibleToVisitors!==false&&Number(p.stock||0)>0;
-const cleanUser=u=>{if(!u)return null;const {password,...rest}=u;return rest};
+const cleanUser=u=>{if(!u)return null;const {password,_id,...rest}=u;return stripMongo(rest)};
 const userForRole=(u,role)=>role==="admin"?cleanUser(u):(()=>{const {accessCode,password,...rest}=u||{};return rest})();
 function json(res,status,data){res.status(status).setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(data))}
 async function meta(db){
@@ -36,7 +50,10 @@ async function auth(db,a){
 }
 async function upsertMany(col,items,transform=x=>x){
   if(!Array.isArray(items)||!items.length)return;
-  const ops=items.filter(x=>x&&x.id).map(x=>({updateOne:{filter:{id:x.id},update:{$set:transform({...x})},upsert:true}}));
+  const ops=items.filter(x=>x&&x.id).map(x=>{
+    const safe=stripMongo(transform({...x}));
+    return {updateOne:{filter:{id:x.id},update:{$set:safe},upsert:true}}
+  });
   if(ops.length)await col.bulkWrite(ops,{ordered:false})
 }
 async function applyDeletes(db,ops=[]){
@@ -49,7 +66,7 @@ async function applyDeletes(db,ops=[]){
 }
 async function writeAdminState(db,state,ops){
   await applyDeletes(db,ops);
-  await db.collection("app_meta").updateOne({_id:"global"},{$set:{rate:Number(state.rate||2400),mainCurrency:state.mainCurrency||"USD",hideMoney:!!state.hideMoney,shopSettings:state.shopSettings||{},adminProfile:state.adminProfile||{},updatedAt:new Date()}},{upsert:true});
+  await db.collection("app_meta").updateOne({_id:"global"},{$set:{rate:Number(state.rate||2400),mainCurrency:state.mainCurrency||"USD",hideMoney:!!state.hideMoney,shopSettings:stripMongo(state.shopSettings||{}),adminProfile:stripMongo(state.adminProfile||{}),updatedAt:new Date()}},{upsert:true});
   for(const name of COLLECTIONS){
     const items=state[name];if(!Array.isArray(items))continue;
     if(name==="users")await upsertMany(db.collection(name),items,u=>{const {password,...safe}=u;return safe});
@@ -61,7 +78,7 @@ async function writeStaffState(db,state,role,user){
   if(Array.isArray(state.orders))await upsertMany(db.collection("orders"),state.orders);
   if(Array.isArray(state.products)){
     const canEdit=role==="manager"&&(user.permissions||[]).includes("products.edit");
-    const ops=state.products.filter(p=>p?.id).map(p=>({updateOne:{filter:{id:p.id},update:canEdit?{$set:p}:{$set:{stock:Number(p.stock||0)}},upsert:canEdit}}));
+    const ops=state.products.filter(p=>p?.id).map(p=>({updateOne:{filter:{id:p.id},update:canEdit?{$set:stripMongo(p)}:{$set:{stock:Number(p.stock||0)}},upsert:canEdit}}));
     if(ops.length)await db.collection("products").bulkWrite(ops,{ordered:false})
   }
 }
@@ -70,24 +87,24 @@ async function privateState(db,role,user){
     db.collection("shops").find({}).toArray(),db.collection("products").find({}).toArray(),db.collection("ads").find({}).toArray(),db.collection("sales").find({}).toArray(),db.collection("orders").find({}).toArray(),db.collection("notifications").find({}).sort({date:-1}).limit(100).toArray()
   ]);
   let users=[];if(role==="admin")users=(await db.collection("users").find({}).toArray()).map(cleanUser);else users=[userForRole(user,role)];
-  return {rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",hideMoney:!!m.hideMoney,shopSettings:m.shopSettings||{},adminProfile:m.adminProfile||{},shops,users,products,ads,sales,orders,notifications}
+  return stripMongo({rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",hideMoney:!!m.hideMoney,shopSettings:m.shopSettings||{},adminProfile:m.adminProfile||{},shops,users,products,ads,sales,orders,notifications})
 }
 async function publicState(db,visitorSessionId){
   const m=await meta(db);const [shops,products,ads,orders]=await Promise.all([
     db.collection("shops").find({}).toArray(),db.collection("products").find({visibleToVisitors:{$ne:false},stock:{$gt:0}}).toArray(),db.collection("ads").find({active:{$ne:false}}).toArray(),visitorSessionId?db.collection("orders").find({visitorSessionId}).toArray():[]
   ]);
-  return {rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",shopSettings:m.shopSettings||{},shops,products:products.filter(publicProduct),ads,orders}
+  return stripMongo({rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",shopSettings:m.shopSettings||{},shops,products:products.filter(publicProduct),ads,orders})
 }
 async function syncPublic(db,body){
   const sid=String(body.visitorSessionId||"");if(!sid)throw Object.assign(new Error("Session visiteur manquante"),{status:400});
-  const incoming=(body.orders||[]).filter(o=>o&&o.visitorSessionId===sid);
+  const incoming=(body.orders||[]).filter(o=>o&&o.visitorSessionId===sid).map(stripMongo);
   for(const o of incoming){
     const existing=await db.collection("orders").findOne({id:o.id});
-    if(!existing){await db.collection("orders").insertOne({...o,visitorSessionId:sid});continue}
+    if(!existing){await db.collection("orders").insertOne(stripMongo({...o,visitorSessionId:sid}));continue}
     const mergedMessages=new Map([...(existing.messages||[]),...(o.messages||[])].filter(Boolean).map(m=>[m.id,m]));
     const serverAdvanced=["claimed","completed","cancelled"].includes(existing.status);
     const merged={...o,...(serverAdvanced?{status:existing.status,claimedById:existing.claimedById,claimedByName:existing.claimedByName,claimedAt:existing.claimedAt,completedAt:existing.completedAt,saleId:existing.saleId}:{}),messages:[...mergedMessages.values()],visitorSessionId:sid,updatedAt:new Date().toISOString()};
-    await db.collection("orders").updateOne({id:o.id},{$set:merged},{upsert:true})
+    await db.collection("orders").updateOne({id:o.id},{$set:stripMongo(merged)},{upsert:true})
   }
   const revision=await bump(db);return {revision,state:await publicState(db,sid)}
 }
@@ -112,7 +129,7 @@ export default async function handler(req,res){
     const au=await auth(db,body.auth);if(!au)return json(res,401,{ok:false,error:"Session non autorisée"});
     if(body.action==="claimOrder"){
       const orderId=String(body.orderId||"");const now=new Date().toISOString();const upd=await db.collection("orders").findOneAndUpdate({id:orderId,status:"waiting",$or:[{claimedById:null},{claimedById:{$exists:false}}]},{$set:{status:"claimed",claimedById:au.user.id,claimedByName:au.user.name,claimedAt:now,updatedAt:now},$push:{messages:{id:`msg-${crypto.randomUUID()}`,senderType:au.role==="admin"?"admin":"agent",senderId:au.user.id,senderName:au.user.name,text:"Bonjour, j’ai récupéré votre commande et je vais vous assister pour la finaliser.",at:now}}},{returnDocument:"after"});
-      if(!upd)return json(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump(db);return json(res,200,{ok:true,revision,order:upd})
+      if(!upd)return json(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump(db);return json(res,200,{ok:true,revision,order:stripMongo(upd)})
     }
     if(body.action==="sync"){
       if(au.role==="admin")await writeAdminState(db,body.state||{},body.operations||[]);
