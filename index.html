@@ -586,8 +586,8 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v28";
-const LEGACY_STORAGE_KEYS=["mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
+const STORAGE_KEY="mkg-full-v30";
+const LEGACY_STORAGE_KEYS=["mkg-full-v30","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
 function storageGet(){
   try{
@@ -710,6 +710,14 @@ function privateHeaders(){
   const a=db.syncAuth;
   return a?{"x-sync-email":a.email||"","x-sync-secret":a.secret||"","x-sync-type":a.type||"staff"}:{}
 }
+async function uploadImageToFirebaseIfNeeded(dataUrl,folder="products"){
+  if(!dataUrl||typeof dataUrl!=="string"||!dataUrl.startsWith("data:image/"))return dataUrl;
+  try{const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dataUrl,folder})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Upload impossible");return j.url}catch(e){console.warn("Upload Firebase différé",e);return dataUrl}
+}
+async function normalizeMediaBeforeSync(){
+  for(const p of (db.products||[]))if(p?.photo?.startsWith?.("data:image/"))p.photo=await uploadImageToFirebaseIfNeeded(p.photo,"products");
+  for(const a of (db.ads||[]))if(a?.image?.startsWith?.("data:image/"))a.image=await uploadImageToFirebaseIfNeeded(a.image,"ads");
+}
 async function apiJson(url,options={}){
   const r=await fetch(url,{cache:"no-store",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
   const data=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
@@ -749,6 +757,7 @@ async function syncPending({silent=false}={}){
   syncInProgress=true;renderSync();
   try{
     const visitor=isVisitor();
+    if(!visitor)await normalizeMediaBeforeSync();
     const pending=db.syncQueue.filter(x=>x.status==="pending");
     const body=visitor?
       {action:"syncPublic",deviceId:db.deviceId,visitorSessionId:db.visitorSessionId,orders:(db.orders||[]).filter(o=>o.visitorSessionId===db.visitorSessionId),operations:pending}:
