@@ -1,142 +1,23 @@
-import { MongoClient } from "mongodb";
+import admin from "firebase-admin";
 import crypto from "node:crypto";
-
-const uri=process.env.MONGODB_URI;
-if(!uri)throw new Error("MONGODB_URI manquant");
-const globalForMongo=globalThis;
-const client=globalForMongo.__mmedprenMongoClient || new MongoClient(uri,{maxPoolSize:10});
-if(!globalForMongo.__mmedprenMongoClient)globalForMongo.__mmedprenMongoClient=client;
-let connected=globalForMongo.__mmedprenMongoConnected;
-async function database(){
-  if(!connected){connected=client.connect();globalForMongo.__mmedprenMongoConnected=connected}
-  await connected;return client.db("mmedpren")
-}
-const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"ndagonywaphilemon@gmail.com").toLowerCase();
-const ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"202020";
-const COLLECTIONS=["shops","users","products","ads","sales","orders","notifications"];
-
-function stripMongo(value){
-  if(Array.isArray(value))return value.map(stripMongo);
-  if(value&&typeof value==="object"){
-    const out={};
-    for(const [k,v] of Object.entries(value)){
-      if(k==="_id")continue;
-      out[k]=stripMongo(v)
-    }
-    return out
-  }
-  return value
-}
-
-const publicProduct=p=>p&&p.visibleToVisitors!==false&&Number(p.stock||0)>0;
-const cleanUser=u=>{if(!u)return null;const {password,_id,...rest}=u;return stripMongo(rest)};
-const userForRole=(u,role)=>role==="admin"?cleanUser(u):(()=>{const {accessCode,password,...rest}=u||{};return rest})();
-function json(res,status,data){res.status(status).setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(data))}
-async function meta(db){
-  const c=db.collection("app_meta");let m=await c.findOne({_id:"global"});
-  if(!m){m={_id:"global",revision:0,rate:2400,mainCurrency:"USD",hideMoney:true,shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},adminProfile:{name:"Administrateur principal",email:ADMIN_EMAIL,phone:""},updatedAt:new Date()};await c.insertOne(m)}
-  return m
-}
-async function bump(db){const r=await db.collection("app_meta").findOneAndUpdate({_id:"global"},{$inc:{revision:1},$set:{updatedAt:new Date()}},{returnDocument:"after"});return Number(r?.revision||0)}
-async function auth(db,a){
-  if(!a?.email||!a?.secret)return null;const email=String(a.email).toLowerCase();
-  if(a.type==="admin"&&email===ADMIN_EMAIL&&a.secret===ADMIN_PASSWORD){
-    const stored=await db.collection("users").findOne({email:{$regex:`^${email.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}$`,$options:"i"}});
-    return {user:stored||{id:"u-admin",name:"Administrateur principal",email:ADMIN_EMAIL,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true},role:"admin"}
-  }
-  const u=await db.collection("users").findOne({email:{$regex:`^${email.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}$`,$options:"i"},accessCode:String(a.secret)});
-  if(!u||u.status==="Suspendu"||(u.suspendedUntil&&new Date(u.suspendedUntil)>new Date()))return null;
-  return {user:u,role:u.role||"seller"}
-}
-async function upsertMany(col,items,transform=x=>x){
-  if(!Array.isArray(items)||!items.length)return;
-  const ops=items.filter(x=>x&&x.id).map(x=>{
-    const safe=stripMongo(transform({...x}));
-    return {updateOne:{filter:{id:x.id},update:{$set:safe},upsert:true}}
-  });
-  if(ops.length)await col.bulkWrite(ops,{ordered:false})
-}
-async function applyDeletes(db,ops=[]){
-  for(const op of ops||[]){const p=op.payload||{};
-    if(op.type==="product.delete"&&p.productId)await db.collection("products").deleteOne({id:p.productId});
-    if(op.type==="ad.delete"&&p.adId)await db.collection("ads").deleteOne({id:p.adId});
-    if(op.type==="staff.delete"&&p.userId)await db.collection("users").deleteOne({id:p.userId,isPrimary:{$ne:true}});
-    if(op.type==="report.reset"&&Array.isArray(p.saleIds))await db.collection("sales").deleteMany({id:{$in:p.saleIds}})
-  }
-}
-async function writeAdminState(db,state,ops){
-  await applyDeletes(db,ops);
-  await db.collection("app_meta").updateOne({_id:"global"},{$set:{rate:Number(state.rate||2400),mainCurrency:state.mainCurrency||"USD",hideMoney:!!state.hideMoney,shopSettings:stripMongo(state.shopSettings||{}),adminProfile:stripMongo(state.adminProfile||{}),updatedAt:new Date()}},{upsert:true});
-  for(const name of COLLECTIONS){
-    const items=state[name];if(!Array.isArray(items))continue;
-    if(name==="users")await upsertMany(db.collection(name),items,u=>{const {password,...safe}=u;return safe});
-    else await upsertMany(db.collection(name),items)
-  }
-}
-async function writeStaffState(db,state,role,user){
-  if(Array.isArray(state.sales))await upsertMany(db.collection("sales"),state.sales);
-  if(Array.isArray(state.orders))await upsertMany(db.collection("orders"),state.orders);
-  if(Array.isArray(state.products)){
-    const canEdit=role==="manager"&&(user.permissions||[]).includes("products.edit");
-    const ops=state.products.filter(p=>p?.id).map(p=>({updateOne:{filter:{id:p.id},update:canEdit?{$set:stripMongo(p)}:{$set:{stock:Number(p.stock||0)}},upsert:canEdit}}));
-    if(ops.length)await db.collection("products").bulkWrite(ops,{ordered:false})
-  }
-}
-async function privateState(db,role,user){
-  const m=await meta(db);const [shops,products,ads,sales,orders,notifications]=await Promise.all([
-    db.collection("shops").find({}).toArray(),db.collection("products").find({}).toArray(),db.collection("ads").find({}).toArray(),db.collection("sales").find({}).toArray(),db.collection("orders").find({}).toArray(),db.collection("notifications").find({}).sort({date:-1}).limit(100).toArray()
-  ]);
-  let users=[];if(role==="admin")users=(await db.collection("users").find({}).toArray()).map(cleanUser);else users=[userForRole(user,role)];
-  return stripMongo({rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",hideMoney:!!m.hideMoney,shopSettings:m.shopSettings||{},adminProfile:m.adminProfile||{},shops,users,products,ads,sales,orders,notifications})
-}
-async function publicState(db,visitorSessionId){
-  const m=await meta(db);const [shops,products,ads,orders]=await Promise.all([
-    db.collection("shops").find({}).toArray(),db.collection("products").find({visibleToVisitors:{$ne:false},stock:{$gt:0}}).toArray(),db.collection("ads").find({active:{$ne:false}}).toArray(),visitorSessionId?db.collection("orders").find({visitorSessionId}).toArray():[]
-  ]);
-  return stripMongo({rate:m.rate||2400,mainCurrency:m.mainCurrency||"USD",shopSettings:m.shopSettings||{},shops,products:products.filter(publicProduct),ads,orders})
-}
-async function syncPublic(db,body){
-  const sid=String(body.visitorSessionId||"");if(!sid)throw Object.assign(new Error("Session visiteur manquante"),{status:400});
-  const incoming=(body.orders||[]).filter(o=>o&&o.visitorSessionId===sid).map(stripMongo);
-  for(const o of incoming){
-    const existing=await db.collection("orders").findOne({id:o.id});
-    if(!existing){await db.collection("orders").insertOne(stripMongo({...o,visitorSessionId:sid}));continue}
-    const mergedMessages=new Map([...(existing.messages||[]),...(o.messages||[])].filter(Boolean).map(m=>[m.id,m]));
-    const serverAdvanced=["claimed","completed","cancelled"].includes(existing.status);
-    const merged={...o,...(serverAdvanced?{status:existing.status,claimedById:existing.claimedById,claimedByName:existing.claimedByName,claimedAt:existing.claimedAt,completedAt:existing.completedAt,saleId:existing.saleId}:{}),messages:[...mergedMessages.values()],visitorSessionId:sid,updatedAt:new Date().toISOString()};
-    await db.collection("orders").updateOne({id:o.id},{$set:stripMongo(merged)},{upsert:true})
-  }
-  const revision=await bump(db);return {revision,state:await publicState(db,sid)}
-}
-export default async function handler(req,res){
-  try{
-    const db=await database();
-    if(req.method==="GET"){
-      const scope=String(req.query.scope||"public");
-      if(scope==="revision"){
-        const m=await meta(db);
-        return json(res,200,{ok:true,revision:Number(m.revision||0),updatedAt:m.updatedAt||null})
-      }
-      if(scope==="public"){const m=await meta(db);return json(res,200,{ok:true,revision:Number(m.revision||0),state:await publicState(db,String(req.query.visitorSessionId||""))})}
-      const a={email:req.headers["x-sync-email"],secret:req.headers["x-sync-secret"],type:req.headers["x-sync-type"]};const au=await auth(db,a);if(!au)return json(res,401,{ok:false,error:"Authentification requise"});const m=await meta(db);return json(res,200,{ok:true,revision:Number(m.revision||0),state:await privateState(db,au.role,au.user)})
-    }
-    if(req.method!=="POST")return json(res,405,{ok:false,error:"Méthode non autorisée"});
-    const body=typeof req.body==="string"?JSON.parse(req.body||"{}"):req.body||{};
-    if(body.action==="auth"){
-      const au=await auth(db,{email:body.email,secret:body.secret,type:body.type});if(!au)return json(res,401,{ok:false,error:"Identifiants incorrects"});return json(res,200,{ok:true,user:userForRole(au.user,au.role)})
-    }
-    if(body.action==="syncPublic"){const out=await syncPublic(db,body);return json(res,200,{ok:true,...out})}
-    const au=await auth(db,body.auth);if(!au)return json(res,401,{ok:false,error:"Session non autorisée"});
-    if(body.action==="claimOrder"){
-      const orderId=String(body.orderId||"");const now=new Date().toISOString();const upd=await db.collection("orders").findOneAndUpdate({id:orderId,status:"waiting",$or:[{claimedById:null},{claimedById:{$exists:false}}]},{$set:{status:"claimed",claimedById:au.user.id,claimedByName:au.user.name,claimedAt:now,updatedAt:now},$push:{messages:{id:`msg-${crypto.randomUUID()}`,senderType:au.role==="admin"?"admin":"agent",senderId:au.user.id,senderName:au.user.name,text:"Bonjour, j’ai récupéré votre commande et je vais vous assister pour la finaliser.",at:now}}},{returnDocument:"after"});
-      if(!upd)return json(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump(db);return json(res,200,{ok:true,revision,order:stripMongo(upd)})
-    }
-    if(body.action==="sync"){
-      if(au.role==="admin")await writeAdminState(db,body.state||{},body.operations||[]);
-      else await writeStaffState(db,body.state||{},au.role,au.user);
-      const revision=await bump(db);
-      return json(res,200,{ok:true,revision,state:await privateState(db,au.role,au.user)})
-    }
-    return json(res,400,{ok:false,error:"Action inconnue"})
-  }catch(e){console.error("SYNC_API",e);return json(res,e.status||500,{ok:false,error:e.status?e.message:"Erreur serveur de synchronisation"})}
-}
+import {initFirebase} from "./firebase-init.js";
+initFirebase();
+const db=admin.firestore(),ROOT=db.collection("mmedpren").doc("global"),ORDERS=db.collection("mmedpren_orders");
+const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"ndagonywaphilemon@gmail.com").toLowerCase(),ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"202020";
+const arr=v=>Array.isArray(v)?v:[];
+function send(res,s,p){res.status(s);res.setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(p))}
+function cleanUser(u){if(!u)return null;const {password,...r}=u;return r}
+function defaults(){return {revision:0,rate:2400,mainCurrency:"USD",hideMoney:true,shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},adminProfile:{name:"Administrateur principal",email:ADMIN_EMAIL,phone:""},shops:[],users:[],products:[],ads:[],sales:[],notifications:[],updatedAt:new Date().toISOString()}}
+async function readRoot(){const s=await ROOT.get();if(s.exists)return {...defaults(),...s.data()};const d=defaults();await ROOT.set(d);return d}
+async function allOrders(){const s=await ORDERS.get();return s.docs.map(d=>d.data().payload).filter(Boolean)}
+async function visitorOrders(id){if(!id)return[];const s=await ORDERS.where("visitorSessionId","==",id).get();return s.docs.map(d=>d.data().payload).filter(Boolean)}
+async function upsertOrders(os){const v=arr(os).filter(o=>o?.id);if(!v.length)return;const b=db.batch();for(const o of v)b.set(ORDERS.doc(o.id),{visitorSessionId:o.visitorSessionId||null,status:o.status||"waiting",claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt||new Date().toISOString(),payload:o},{merge:true});await b.commit()}
+async function bump(){return db.runTransaction(async t=>{const s=await t.get(ROOT),n=(s.exists?Number(s.data().revision||0):0)+1;t.set(ROOT,{revision:n,updatedAt:new Date().toISOString()},{merge:true});return n})}
+async function auth(a){if(!a?.email||!a?.secret)return null;const email=String(a.email).toLowerCase(),root=await readRoot(),users=arr(root.users);if(a.type==="admin"&&email===ADMIN_EMAIL&&String(a.secret)===String(ADMIN_PASSWORD)){const stored=users.find(u=>String(u.email||"").toLowerCase()===email);return {role:"admin",user:stored||{id:"u-admin",name:"Administrateur principal",email:ADMIN_EMAIL,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true},root}}const user=users.find(u=>String(u.email||"").toLowerCase()===email&&String(u.accessCode||"")===String(a.secret));if(!user||user.status==="Suspendu"||(user.suspendedUntil&&new Date(user.suspendedUntil)>new Date()))return null;return {role:user.role||"seller",user,root}}
+async function privateState(a){const r=a.root||await readRoot();return {rate:Number(r.rate||2400),mainCurrency:r.mainCurrency||"USD",hideMoney:!!r.hideMoney,shopSettings:r.shopSettings||{},adminProfile:r.adminProfile||{},shops:arr(r.shops),users:a.role==="admin"?arr(r.users).map(cleanUser):[cleanUser(a.user)],products:arr(r.products),ads:arr(r.ads),sales:arr(r.sales),orders:await allOrders(),notifications:arr(r.notifications)}}
+async function publicState(sid){const r=await readRoot();return {rate:Number(r.rate||2400),mainCurrency:r.mainCurrency||"USD",shopSettings:r.shopSettings||{},shops:arr(r.shops),products:arr(r.products).filter(p=>p&&p.visibleToVisitors!==false&&Number(p.stock||0)>0),ads:arr(r.ads).filter(a=>a?.active!==false),orders:await visitorOrders(sid)}}
+function deletes(state,ops){let users=arr(state.users),products=arr(state.products),ads=arr(state.ads),sales=arr(state.sales);for(const op of arr(ops)){const p=op?.payload||{};if(op.type==="product.delete"&&p.productId)products=products.filter(x=>x.id!==p.productId);if(op.type==="ad.delete"&&p.adId)ads=ads.filter(x=>x.id!==p.adId);if(op.type==="staff.delete"&&p.userId)users=users.filter(x=>x.id!==p.userId||x.isPrimary);if(op.type==="report.reset"&&Array.isArray(p.saleIds)){const ids=new Set(p.saleIds);sales=sales.filter(x=>!ids.has(x.id))}}return{users,products,ads,sales}}
+async function writeAdmin(s,ops){const x=deletes(s,ops),users=x.users.map(u=>{const{password,...r}=u;return r});await ROOT.set({rate:Number(s.rate||2400),mainCurrency:s.mainCurrency||"USD",hideMoney:!!s.hideMoney,shopSettings:s.shopSettings||{},adminProfile:s.adminProfile||{},shops:arr(s.shops),users,products:x.products,ads:x.ads,sales:x.sales,notifications:arr(s.notifications),updatedAt:new Date().toISOString()},{merge:true});await upsertOrders(s.orders)}
+async function writeStaff(s,a){const r=await readRoot(),sm=new Map(arr(r.sales).map(x=>[x.id,x]));for(const x of arr(s.sales))if(x?.id)sm.set(x.id,x);const pm=new Map(arr(r.products).map(x=>[x.id,x])),can=a.role==="manager"&&arr(a.user.permissions).includes("products.edit");for(const x of arr(s.products)){if(!x?.id)continue;const cur=pm.get(x.id);if(can)pm.set(x.id,x);else if(cur)pm.set(x.id,{...cur,stock:Number(x.stock||0)})}await ROOT.set({sales:[...sm.values()],products:[...pm.values()],updatedAt:new Date().toISOString()},{merge:true});await upsertOrders(s.orders)}
+async function syncPublic(body){const sid=String(body.visitorSessionId||"");if(!sid)throw Object.assign(new Error("Session visiteur manquante"),{status:400});for(const o of arr(body.orders).filter(o=>o?.id&&o.visitorSessionId===sid)){const ref=ORDERS.doc(o.id);await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists){t.set(ref,{visitorSessionId:sid,status:o.status||"waiting",claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt||new Date().toISOString(),payload:o});return}const row=s.data(),server=row.payload||{},mm=new Map([...arr(server.messages),...arr(o.messages)].filter(Boolean).map(m=>[m.id,m])),adv=["claimed","completed","cancelled"].includes(row.status||server.status),merged={...o,...(adv?{status:row.status||server.status,claimedById:row.claimedById||server.claimedById,claimedByName:row.claimedByName||server.claimedByName,claimedAt:server.claimedAt,completedAt:server.completedAt,saleId:server.saleId}:{}),visitorSessionId:sid,messages:[...mm.values()],updatedAt:new Date().toISOString()};t.set(ref,{visitorSessionId:sid,status:merged.status||"waiting",claimedById:merged.claimedById||null,claimedByName:merged.claimedByName||null,updatedAt:merged.updatedAt,payload:merged},{merge:true})})}const revision=await bump();return{revision,state:await publicState(sid)}}
+export default async function handler(req,res){try{if(req.method==="GET"){const scope=String(req.query.scope||"public");if(scope==="revision"){const r=await readRoot();return send(res,200,{ok:true,provider:"firebase",revision:Number(r.revision||0),updatedAt:r.updatedAt||null})}if(scope==="public"){const r=await readRoot();return send(res,200,{ok:true,provider:"firebase",revision:Number(r.revision||0),state:await publicState(String(req.query.visitorSessionId||""))})}const a=await auth({email:req.headers["x-sync-email"],secret:req.headers["x-sync-secret"],type:req.headers["x-sync-type"]});if(!a)return send(res,401,{ok:false,error:"Authentification requise"});return send(res,200,{ok:true,provider:"firebase",revision:Number(a.root.revision||0),state:await privateState(a)})}if(req.method!=="POST")return send(res,405,{ok:false,error:"Méthode non autorisée"});const body=typeof req.body==="string"?JSON.parse(req.body||"{}"):req.body||{};if(body.action==="auth"){const a=await auth({email:body.email,secret:body.secret,type:body.type});if(!a)return send(res,401,{ok:false,error:"Identifiants incorrects"});return send(res,200,{ok:true,provider:"firebase",user:cleanUser(a.user)})}if(body.action==="syncPublic"){const r=await syncPublic(body);return send(res,200,{ok:true,provider:"firebase",...r})}const a=await auth(body.auth);if(!a)return send(res,401,{ok:false,error:"Session non autorisée"});if(body.action==="claimOrder"){const ref=ORDERS.doc(String(body.orderId||""));let claimed=null;await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists)return;const row=s.data();if((row.status||row.payload?.status)!=="waiting"||row.claimedById)return;const now=new Date().toISOString(),old=row.payload||{},msg={id:`msg-${crypto.randomUUID()}`,senderType:a.role==="admin"?"admin":"agent",senderId:a.user.id,senderName:a.user.name,text:"Bonjour, j’ai récupéré votre commande et je vais vous assister pour la finaliser.",at:now};claimed={...old,status:"claimed",claimedById:a.user.id,claimedByName:a.user.name,claimedAt:now,updatedAt:now,messages:[...arr(old.messages),msg]};t.set(ref,{status:"claimed",claimedById:a.user.id,claimedByName:a.user.name,updatedAt:now,payload:claimed},{merge:true})});if(!claimed)return send(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump();return send(res,200,{ok:true,provider:"firebase",revision,order:claimed})}if(body.action==="sync"){if(a.role==="admin")await writeAdmin(body.state||{},body.operations||[]);else await writeStaff(body.state||{},a);const revision=await bump(),refreshed=await auth(body.auth);return send(res,200,{ok:true,provider:"firebase",revision,state:await privateState(refreshed)})}return send(res,400,{ok:false,error:"Action inconnue"})}catch(e){console.error("FIREBASE_SYNC_API",e);return send(res,e.status||500,{ok:false,provider:"firebase",error:e?.message||"Erreur serveur Firebase"})}}
