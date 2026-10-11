@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v23 — MongoDB Sync</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v31 — Firebase Admin stable</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -153,6 +153,18 @@ body.admin-impersonating .masterbar{display:flex}
 
 
 #syncNowBtn{display:none!important}
+
+/* v31: navigation interne stable sur mobile */
+body.internal-mode .bottom{
+  grid-template-columns:repeat(7,minmax(76px,1fr));
+  overflow-x:auto;
+  overflow-y:hidden;
+  justify-content:flex-start;
+  scrollbar-width:none;
+}
+body.internal-mode .bottom::-webkit-scrollbar{display:none}
+body.internal-mode .bottom .nav{min-width:76px}
+
 </style>
 </head>
 <body>
@@ -586,8 +598,8 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v30";
-const LEGACY_STORAGE_KEYS=["mkg-full-v30","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
+const STORAGE_KEY="mkg-full-v31";
+const LEGACY_STORAGE_KEYS=["mkg-full-v30","mkg-full-v28","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
 function storageGet(){
   try{
@@ -629,6 +641,44 @@ db.shopSettings.rccm=db.shopSettings.rccm||"CD/BKV/RCCM/24-A-01446";
 db.shopSettings.receiptLocation=db.shopSettings.receiptLocation||"ISP, Bukavu/Sud-Kivu";
 db.shopSettings.correctionWindowMin=Math.max(1,Number(db.shopSettings.correctionWindowMin)||10);
 restoreSession();
+
+function ensureLocalPrimaryAdmin(){
+  if(!Array.isArray(db.users))db.users=[];
+  let admin=db.users.find(u=>u.isPrimary)||db.users.find(u=>String(u.email||"").toLowerCase()==="ndagonywaphilemon@gmail.com");
+  if(!admin){
+    admin={
+      id:"u-admin",
+      name:db.adminProfile?.name||"Administrateur principal",
+      email:db.adminProfile?.email||"ndagonywaphilemon@gmail.com",
+      password:null,
+      accessCode:null,
+      role:"admin",
+      shops:["main"],
+      permissions:["*"],
+      status:"Actif",
+      isPrimary:true,
+      suspendedUntil:null
+    };
+    db.users.unshift(admin)
+  }else{
+    admin.id=admin.id||"u-admin";
+    admin.role="admin";
+    admin.isPrimary=true;
+    admin.permissions=["*"];
+    if(!Array.isArray(admin.shops)||!admin.shops.length)admin.shops=["main"]
+  }
+
+  if(!Array.isArray(db.shops))db.shops=[];
+  if(!db.shops.some(s=>s.id==="main")){
+    db.shops.unshift({id:"main",name:"Boutique principale",location:"ISP, Bukavu/Sud-Kivu"})
+  }
+
+  if(db.sessionType==="internal"&&db.syncAuth?.type==="admin"){
+    db.currentUserId=admin.id;
+    db.role="admin"
+  }
+}
+ensureLocalPrimaryAdmin();
 let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
@@ -677,11 +727,20 @@ function sharedState(){
   })
 }
 function preserveLocalSecrets(nextUsers){
-  const existing=new Map((db.users||[]).map(u=>[u.id,u]));
-  return (nextUsers||[]).map(u=>{
+  const oldUsers=(db.users||[]);
+  const existing=new Map(oldUsers.map(u=>[u.id,u]));
+  const merged=(nextUsers||[]).map(u=>{
     const old=existing.get(u.id)||{};
     return {...u,password:u.password??old.password,accessCode:u.accessCode??old.accessCode}
-  })
+  });
+
+  const current=oldUsers.find(u=>u.id===db.currentUserId);
+  if(current&&!merged.some(u=>u.id===current.id))merged.unshift({...current});
+
+  const primary=oldUsers.find(u=>u.isPrimary);
+  if(primary&&!merged.some(u=>u.id===primary.id))merged.unshift({...primary});
+
+  return merged
 }
 function applyRemoteState(remote,scope="private"){
   if(!remote)return;
@@ -705,6 +764,8 @@ function applyRemoteState(remote,scope="private"){
     db.orders=[...(db.orders||[]).filter(o=>o.visitorSessionId!==db.visitorSessionId||!ownIds.has(o.id)),...remote.orders]
   }
   restoreSessionSnapshot(__session);
+  ensureLocalPrimaryAdmin();
+  saveSession();
 }
 function privateHeaders(){
   const a=db.syncAuth;
@@ -821,21 +882,31 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 function fmt(v,c="USD"){return c==="USD"?"$"+Number(v||0).toFixed(2):Math.round(Number(v||0)).toLocaleString("fr-FR")+" FC"}
 function usdToCdf(v){return Number(v||0)*db.rate}function cdfToUsd(v){return Number(v||0)/db.rate}
 function displayDate(d){return new Date(d).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}
-function activeUser(){return db.users.find(u=>u.id===db.currentUserId)||null}
-function masterAdmin(){return db.users.find(u=>u.id===db.impersonatedByAdminId)||db.users.find(u=>u.isPrimary)||null}
-function currentRole(){return activeUser()?.role||"visitor"}
-function isAdmin(){return currentRole()==="admin"||currentRole()==="manager"}
-function isTrueAdmin(){return currentRole()==="admin"||!!db.impersonatedByAdminId}
+function activeUser(){return (db.users||[]).find(u=>u.id===db.currentUserId)||null}
+function masterAdmin(){return (db.users||[]).find(u=>u.id===db.impersonatedByAdminId)||(db.users||[]).find(u=>u.isPrimary)||null}
+function currentRole(){
+  const u=activeUser();
+  if(u?.role)return u.role;
+  if(db.sessionType==="internal"){
+    if(db.role)return db.role;
+    if(db.syncAuth?.type==="admin")return "admin";
+    return "seller";
+  }
+  return "visitor"
+}
+function isAdmin(){return !isVisitor()&&(currentRole()==="admin"||currentRole()==="manager")}
+function isTrueAdmin(){return !isVisitor()&&(currentRole()==="admin"||db.syncAuth?.type==="admin"||!!db.impersonatedByAdminId)}
 function hasPermission(key){
   if(isVisitor())return false;
-  if(db.impersonatedByAdminId)return true;
-  const u=activeUser();if(!u)return false;
-  return u.role==="admin"||u.permissions?.includes("*")||u.permissions?.includes(key)
+  if(isTrueAdmin())return true;
+  const u=activeUser();
+  if(!u)return false;
+  return u.permissions?.includes("*")||u.permissions?.includes(key)
 }
 function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
 function isVisitor(){return db.sessionType==="visitor"}
 
-const SESSION_KEY="mkg-session-v28";
+const SESSION_KEY="mkg-session-v31";
 function sessionSnapshot(){return {sessionType:db.sessionType,currentUserId:db.currentUserId,impersonatedByAdminId:db.impersonatedByAdminId,role:db.role,syncAuth:db.syncAuth?{...db.syncAuth}:null}}
 function restoreSessionSnapshot(s){if(!s)return;db.sessionType=s.sessionType;db.currentUserId=s.currentUserId;db.impersonatedByAdminId=s.impersonatedByAdminId;db.role=s.role;db.syncAuth=s.syncAuth}
 function saveSession(){try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(sessionSnapshot()))}catch(e){}}
@@ -933,7 +1004,6 @@ function render(){
    renderStorefront();renderVisitorChat();
    const activePanel=$(".panel.active");
    if(!activePanel||!["storefront","visitorChat"].includes(activePanel.id))go("storefront",false);
-   if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100);
  }else{
    const activePanel=$(".panel.active");
    if(!activePanel||["storefront","visitorChat"].includes(activePanel.id))go("home",false);
@@ -1410,13 +1480,27 @@ $("#loginBtn").onclick=async()=>{
   }
   if(!localOk){$("#loginMessage").textContent=navigator.onLine?"Email, mot de passe ou code d’accès incorrect.":"Identifiants non reconnus hors connexion sur cet appareil.";$("#loginMessage").style.display="block";return}
   if(isSuspended(u)){$("#loginMessage").textContent=`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`;$("#loginMessage").style.display="block";return}
-  db.syncAuth={email,secret,type};db.currentUserId=u.id;db.impersonatedByAdminId=null;db.role=u.role;db.sessionType="internal";currentShop=u.shops?.[0]||"main";saveSession();
+  db.syncAuth={email,secret,type};
+  db.currentUserId=u.id;
+  db.impersonatedByAdminId=null;
+  db.role=(type==="admin"?"admin":u.role);
+  db.sessionType="internal";
+  if(type==="admin"){
+    u.role="admin";u.isPrimary=true;u.permissions=["*"];
+    if(!Array.isArray(u.shops)||!u.shops.length)u.shops=["main"]
+  }
+  ensureLocalPrimaryAdmin();
+  currentShop=(activeUser()?.shops?.[0])||"main";
+  saveSession();
   save(false);closeModals();render();go("home",true);
   if(navigator.onLine){
     const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
     if(pending)await syncPending({silent:true});
     else await pullRemote({silent:true});
-    render();go(routeForSession(currentRoute()),false)
+    ensureLocalPrimaryAdmin();
+    saveSession();
+    render();
+    go("home",false)
   }
 };
 
