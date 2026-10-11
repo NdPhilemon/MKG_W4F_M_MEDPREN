@@ -1,9 +1,9 @@
 {
   "name": "mkg-w4f-mmedpren",
-  "version": "28.1.0",
+  "version": "30.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "mongodb": "^6.20.0"
+    "firebase-admin": "^13.5.0"
   }
 }
