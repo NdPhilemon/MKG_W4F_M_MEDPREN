@@ -847,16 +847,20 @@ async function syncPending({silent=false}={}){
     db.lastSyncError=e.message||"Erreur de synchronisation";
     persistBusinessState();
     if(e.status===401){
-      clearSession();
-      db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";db.syncAuth=null;
+      // Ne pas déconnecter brutalement l'utilisateur à cause d'un échec
+      // de synchronisation en arrière-plan. La session reste locale et
+      // l'erreur est affichée/retentée automatiquement.
+      console.warn("Session distante à revalider :",e.message);
     }
     if(!silent)alert(`Synchronisation impossible : ${e.message}`);
     return false
   }finally{syncInProgress=false;renderSync()}
 }
 async function remoteAuthenticate(email,secret,type){
-  const data=await apiJson("/api/sync",{method:"POST",body:JSON.stringify({action:"auth",email,secret,type})});
-  return data.user
+  return await apiJson("/api/sync",{
+    method:"POST",
+    body:JSON.stringify({action:"auth",email,secret,type})
+  });
 }
 async function claimOrderRemote(orderId){
   const data=await apiJson("/api/sync",{method:"POST",body:JSON.stringify({action:"claimOrder",orderId,auth:db.syncAuth})});
@@ -1506,50 +1510,116 @@ $("#loginType").onchange=()=>{
 $("#stayVisitorBtn").onclick=()=>{closeModals();enterVisitorMode()};
 $("#publicLoginBtn").onclick=()=>openModal("accountModal");
 $("#loginBtn").onclick=async()=>{
-  const email=$("#loginEmail").value.trim().toLowerCase(),secret=$("#loginPassword").value.trim(),type=$("#loginType").value;
-  if(!email||!secret)return;
-  $("#loginMessage").style.display="none";
-  let u=db.users.find(x=>String(x.email).toLowerCase()===email);
-  let localOk=false;
-  if(u&&!isSuspended(u)){
-    localOk=type==="admin"?(u.role==="admin"&&u.isPrimary&&u.password===secret):(u.role!=="admin"&&u.accessCode===secret)
+  const btn=$("#loginBtn");
+  const email=$("#loginEmail").value.trim().toLowerCase();
+  const secret=$("#loginPassword").value.trim();
+  const type=$("#loginType").value;
+  const message=$("#loginMessage");
+
+  if(!email||!secret){
+    message.textContent="Veuillez saisir l’adresse email et le mot de passe/code d’accès.";
+    message.style.display="block";
+    return
   }
-  if(!localOk&&navigator.onLine){
-    try{
-      const remote=await remoteAuthenticate(email,secret,type);
-      const existing=db.users.find(x=>x.id===remote.id);
+
+  const previousText=btn.textContent;
+  btn.disabled=true;
+  btn.textContent="Connexion…";
+  message.style.display="none";
+
+  try{
+    let u=null;
+    let authToken="";
+
+    // En ligne : toujours demander au serveur Firebase/Vercel de valider
+    // les identifiants afin d'obtenir le jeton persistant.
+    if(navigator.onLine){
+      const authResult=await remoteAuthenticate(email,secret,type);
+      if(!authResult?.user)throw new Error("Réponse d’authentification invalide.");
+
+      authToken=authResult.token||"";
+      const remote=authResult.user;
+      const existing=(db.users||[]).find(x=>x.id===remote.id);
       const localUser={...remote};
-      if(type==="admin")localUser.password=secret;else localUser.accessCode=secret;
-      if(existing)Object.assign(existing,localUser);else db.users.push(localUser);
-      u=db.users.find(x=>x.id===remote.id);localOk=true
-    }catch(e){localOk=false}
-  }
-  if(!localOk){$("#loginMessage").textContent=navigator.onLine?"Email, mot de passe ou code d’accès incorrect.":"Identifiants non reconnus hors connexion sur cet appareil.";$("#loginMessage").style.display="block";return}
-  if(isSuspended(u)){$("#loginMessage").textContent=`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`;$("#loginMessage").style.display="block";return}
-  db.syncAuth={email,type,token:data.token||"",secret:data.token?null:secret};
-  db.currentUserId=u.id;
-  db.impersonatedByAdminId=null;
-  db.role=(type==="admin"?"admin":u.role);
-  db.sessionType="internal";
-  if(type==="admin"){
-    u.role="admin";u.isPrimary=true;u.permissions=["*"];
-    if(!Array.isArray(u.shops)||!u.shops.length)u.shops=["main"]
-  }
-  ensureLocalPrimaryAdmin();
-  currentShop=(activeUser()?.shops?.[0])||"main";
-  saveSession();
-  save(false);closeModals();render();go("home",true);
-  if(navigator.onLine){
-    const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
-    if(pending)await syncPending({silent:true});
-    else await pullRemote({silent:true});
+
+      // Gardé uniquement dans la mémoire métier locale pour le secours hors ligne.
+      // Le mot de passe n'est pas mis dans la session persistante.
+      if(type==="admin")localUser.password=secret;
+      else localUser.accessCode=secret;
+
+      if(existing)Object.assign(existing,localUser);
+      else db.users.push(localUser);
+
+      u=(db.users||[]).find(x=>x.id===remote.id);
+    }else{
+      // Hors ligne : utilisation uniquement des identifiants déjà connus
+      // sur cet appareil.
+      u=(db.users||[]).find(x=>String(x.email||"").toLowerCase()===email);
+      const localOk=u&&!isSuspended(u)&&(
+        type==="admin"
+          ? (u.role==="admin"&&u.isPrimary&&u.password===secret)
+          : (u.role!=="admin"&&u.accessCode===secret)
+      );
+      if(!localOk)throw new Error("Identifiants non reconnus hors connexion sur cet appareil.");
+    }
+
+    if(!u)throw new Error("Utilisateur introuvable.");
+    if(isSuspended(u))throw new Error(`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`);
+
+    db.syncAuth={
+      email,
+      type,
+      token:authToken,
+      secret:authToken?null:secret
+    };
+    db.currentUserId=u.id;
+    db.impersonatedByAdminId=null;
+    db.role=(type==="admin"?"admin":u.role);
+    db.sessionType="internal";
+
+    if(type==="admin"){
+      u.role="admin";
+      u.isPrimary=true;
+      u.permissions=["*"];
+      if(!Array.isArray(u.shops)||!u.shops.length)u.shops=["main"];
+    }
+
     ensureLocalPrimaryAdmin();
+    currentShop=(activeUser()?.shops?.[0])||"main";
+
+    // Sauvegarder la session AVANT tout pull/sync.
     saveSession();
+    save(false);
+
+    closeModals();
     render();
-    go("home",false)
+    go("home",true);
+
+    // La session est déjà ouverte : une erreur de sync ne doit jamais
+    // empêcher la connexion ni renvoyer l'utilisateur vers Visiteur.
+    if(navigator.onLine){
+      try{
+        const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
+        if(pending)await syncPending({silent:true});
+        else await pullRemote({silent:true});
+      }catch(e){
+        console.warn("Synchronisation post-connexion:",e);
+      }
+
+      ensureLocalPrimaryAdmin();
+      saveSession();
+      render();
+      go("home",false);
+    }
+  }catch(e){
+    console.error("LOGIN_ERROR",e);
+    message.textContent=e?.message||"Connexion impossible.";
+    message.style.display="block";
+  }finally{
+    btn.disabled=false;
+    btn.textContent=previousText;
   }
 };
-
 
 $("#resetReceiptSettingsBtn").onclick=()=>{
   if(!isTrueAdmin())return;
