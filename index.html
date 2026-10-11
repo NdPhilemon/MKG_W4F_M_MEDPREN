@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="M'MEDPREN">
 
-<title>MKG-W4F M'MEDPREN — Version fonctionnelle v31 — Firebase Admin stable</title>
+<title>MKG-W4F M'MEDPREN — Version fonctionnelle v32 — Firebase stable</title>
 <style>
 :root{
   --bg:#fafafa;--card:#fff;--text:#191919;--muted:#6b7280;--line:#e5e7eb;
@@ -598,8 +598,8 @@ const seed={
   notifications:[]
 };
 function clone(x){return JSON.parse(JSON.stringify(x))}
-const STORAGE_KEY="mkg-full-v31";
-const LEGACY_STORAGE_KEYS=["mkg-full-v30","mkg-full-v28","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
+const STORAGE_KEY="mkg-full-v32";
+const LEGACY_STORAGE_KEYS=["mkg-full-v31","mkg-full-v30","mkg-full-v28","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
 function storageGet(){
   try{
@@ -704,7 +704,7 @@ function queueSync(type,payload={}){
 }
 function scheduleAutoSync(){
   clearTimeout(syncTimer);
-  syncTimer=setTimeout(()=>syncPending({silent:true}),300)
+  syncTimer=setTimeout(()=>syncPending({silent:true}),120)
 }
 function stripMongoIds(value){
   if(Array.isArray(value))return value.map(stripMongoIds);
@@ -769,15 +769,26 @@ function applyRemoteState(remote,scope="private"){
 }
 function privateHeaders(){
   const a=db.syncAuth;
-  return a?{"x-sync-email":a.email||"","x-sync-secret":a.secret||"","x-sync-type":a.type||"staff"}:{}
+  if(!a)return {};
+  if(a.token)return {"x-sync-token":a.token,"x-sync-email":a.email||"","x-sync-type":a.type||"staff"};
+  return {"x-sync-email":a.email||"","x-sync-secret":a.secret||"","x-sync-type":a.type||"staff"}
 }
 async function uploadImageToFirebaseIfNeeded(dataUrl,folder="products"){
   if(!dataUrl||typeof dataUrl!=="string"||!dataUrl.startsWith("data:image/"))return dataUrl;
-  try{const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dataUrl,folder})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||"Upload impossible");return j.url}catch(e){console.warn("Upload Firebase différé",e);return dataUrl}
+  const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dataUrl,folder})});
+  const j=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
+  if(!r.ok||!j.ok||!j.url)throw new Error(j.error||"Upload image Firebase impossible");
+  return j.url
 }
 async function normalizeMediaBeforeSync(){
-  for(const p of (db.products||[]))if(p?.photo?.startsWith?.("data:image/"))p.photo=await uploadImageToFirebaseIfNeeded(p.photo,"products");
-  for(const a of (db.ads||[]))if(a?.image?.startsWith?.("data:image/"))a.image=await uploadImageToFirebaseIfNeeded(a.image,"ads");
+  let changed=false;
+  for(const p of (db.products||[])){
+    if(p?.photo?.startsWith?.("data:image/")){p.photo=await uploadImageToFirebaseIfNeeded(p.photo,"products");changed=true}
+  }
+  for(const a of (db.ads||[])){
+    if(a?.image?.startsWith?.("data:image/")){a.image=await uploadImageToFirebaseIfNeeded(a.image,"ads");changed=true}
+  }
+  if(changed)persistBusinessState()
 }
 async function apiJson(url,options={}){
   const r=await fetch(url,{cache:"no-store",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
@@ -829,10 +840,16 @@ async function syncPending({silent=false}={}){
     const now=new Date().toISOString();
     db.syncQueue.forEach(x=>{if(x.status==="pending"){x.status="synced";x.syncedAt=now}});
     db.syncQueue=db.syncQueue.slice(-120);
-    db.lastSyncAt=now;db.lastPullAt=now;save(false);render();
+    db.lastSyncError=null;db.lastSyncAt=now;db.lastPullAt=now;save(false);render();
     if(!silent)alert("Synchronisation terminée.");
     return true
   }catch(e){
+    db.lastSyncError=e.message||"Erreur de synchronisation";
+    persistBusinessState();
+    if(e.status===401){
+      clearSession();
+      db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";db.syncAuth=null;
+    }
     if(!silent)alert(`Synchronisation impossible : ${e.message}`);
     return false
   }finally{syncInProgress=false;renderSync()}
@@ -860,7 +877,7 @@ async function checkRemoteRevision(){
     if(rev!==Number(db.serverRevision||0))await pullRemote({silent:true});
   }catch(e){}
 }
-function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,3000)}
+function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,2000)}
 window.addEventListener("online",()=>{renderNetwork();renderSync();setTimeout(async()=>{const pending=(db.syncQueue||[]).some(x=>x.status==="pending");if(pending)await syncPending({silent:true});await checkRemoteRevision()},150)});
 window.addEventListener("offline",()=>{renderNetwork();renderSync()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)checkRemoteRevision()});
@@ -906,12 +923,36 @@ function hasPermission(key){
 function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
 function isVisitor(){return db.sessionType==="visitor"}
 
-const SESSION_KEY="mkg-session-v31";
+const SESSION_KEY="mkg-session-v32";
+const PERSISTENT_SESSION_KEY="mkg-auth-session-v32";
 function sessionSnapshot(){return {sessionType:db.sessionType,currentUserId:db.currentUserId,impersonatedByAdminId:db.impersonatedByAdminId,role:db.role,syncAuth:db.syncAuth?{...db.syncAuth}:null}}
 function restoreSessionSnapshot(s){if(!s)return;db.sessionType=s.sessionType;db.currentUserId=s.currentUserId;db.impersonatedByAdminId=s.impersonatedByAdminId;db.role=s.role;db.syncAuth=s.syncAuth}
-function saveSession(){try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(sessionSnapshot()))}catch(e){}}
-function clearSession(){try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}}
-function restoreSession(){try{const s=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");if(s?.sessionType==="internal"&&s.currentUserId)restoreSessionSnapshot(s)}catch(e){}}
+function persistentSessionSnapshot(){
+  const s=sessionSnapshot();
+  if(s.syncAuth){
+    s.syncAuth={email:s.syncAuth.email||"",type:s.syncAuth.type||"staff",token:s.syncAuth.token||""};
+  }
+  return s
+}
+function saveSession(){
+  const snap=persistentSessionSnapshot();
+  try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(snap))}catch(e){}
+  try{localStorage.setItem(PERSISTENT_SESSION_KEY,JSON.stringify(snap))}catch(e){}
+}
+function clearSession(){
+  try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}
+  try{localStorage.removeItem(PERSISTENT_SESSION_KEY)}catch(e){}
+}
+function restoreSession(){
+  try{
+    const raw=sessionStorage.getItem(SESSION_KEY)||localStorage.getItem(PERSISTENT_SESSION_KEY);
+    const s=JSON.parse(raw||"null");
+    if(s?.sessionType==="internal"&&s.currentUserId&&s.syncAuth?.token){
+      restoreSessionSnapshot(s);
+      try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(s))}catch(e){}
+    }
+  }catch(e){}
+}
 function businessSnapshot(){
   const out=stripMongoIds?stripMongoIds(db):JSON.parse(JSON.stringify(db));
   delete out.sessionType;delete out.currentUserId;delete out.impersonatedByAdminId;delete out.role;delete out.syncAuth;
@@ -1355,7 +1396,11 @@ $("#saveProductBtn").onclick=async()=>{
   let photo=null;
   if(f){
     if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
-    photo=await compressImageFile(f)
+    photo=await compressImageFile(f);
+    if(navigator.onLine){
+      try{photo=await uploadImageToFirebaseIfNeeded(photo,"products")}
+      catch(e){return alert(`La photo n’a pas pu être enregistrée : ${e.message}`)}
+    }
   }
 
   if(editingProductId){
@@ -1384,6 +1429,7 @@ $("#saveProductBtn").onclick=async()=>{
   }
 
   save();
+  if(navigator.onLine)await syncPending({silent:true});
   editingProductId=null;
   closeModals();
   render();
@@ -1480,7 +1526,7 @@ $("#loginBtn").onclick=async()=>{
   }
   if(!localOk){$("#loginMessage").textContent=navigator.onLine?"Email, mot de passe ou code d’accès incorrect.":"Identifiants non reconnus hors connexion sur cet appareil.";$("#loginMessage").style.display="block";return}
   if(isSuspended(u)){$("#loginMessage").textContent=`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`;$("#loginMessage").style.display="block";return}
-  db.syncAuth={email,secret,type};
+  db.syncAuth={email,type,token:data.token||"",secret:data.token?null:secret};
   db.currentUserId=u.id;
   db.impersonatedByAdminId=null;
   db.role=(type==="admin"?"admin":u.role);
@@ -1852,10 +1898,20 @@ if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   const f=$("#adImageInput").files[0];
   if(!f)return alert("Choisissez une image publicitaire.");
   if(!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
-  const image=await compressImageFile(f,1400,.78);
-  db.ads.push({id:uid("ad"),image,text:$("#adTextInput").value.trim(),active:true,createdAt:new Date().toISOString()});
-  $("#adImageInput").value="";$("#adTextInput").value="";
-  queueSync("ad.create",{});save();renderAds();renderAdAdmin()
+  const btn=$("#addAdBtn");const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
+  try{
+    let image=await compressImageFile(f,1400,.78);
+    if(navigator.onLine)image=await uploadImageToFirebaseIfNeeded(image,"ads");
+    const ad={id:uid("ad"),image,text:$("#adTextInput").value.trim(),active:true,createdAt:new Date().toISOString()};
+    db.ads.push(ad);
+    $("#adImageInput").value="";$("#adTextInput").value="";
+    queueSync("ad.create",{adId:ad.id});save();renderAds();renderAdAdmin();
+    if(navigator.onLine){
+      const ok=await syncPending({silent:true});
+      if(!ok)alert("La publicité reste enregistrée sur cet appareil et sera renvoyée automatiquement dès que la synchronisation réussira.")
+    }
+  }catch(e){alert(`La publicité n’a pas pu être enregistrée : ${e.message}`)}
+  finally{btn.disabled=false;btn.textContent=oldText}
 };
 window.toggleAd=id=>{
   if(!isTrueAdmin())return;
@@ -1882,14 +1938,16 @@ try{
   render();
   routeFromHash();
   if(navigator.onLine)setTimeout(async()=>{
-    if(isVisitor())await refreshPublicCatalog();
-    else{
+    if(isVisitor()){
+      await refreshPublicCatalog();
+      render();go("storefront",false)
+    }else{
       const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
       if(pending)await syncPending({silent:true});
       else await pullRemote({silent:true}).catch(()=>{});
       render();go(routeForSession(currentRoute()),false)
     }
-  },200);
+  },120);
 }catch(err){
   console.error("Erreur initialisation MKG-W4F:",err);
 }
