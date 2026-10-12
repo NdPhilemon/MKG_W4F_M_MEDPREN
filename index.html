@@ -571,7 +571,11 @@ body.internal-mode .bottom .nav{min-width:76px}
 </div></div>
 <div id="printArea" class="print-only"><div id="receiptPrint" class="receipt"></div></div>
 
+<script src="./sync-core.js"></script>
 <script>
+const SESSION_KEY="mkg-session-v32";
+const PERSISTENT_SESSION_KEY="mkg-auth-session-v32";
+let sessionEpoch=0,localGeneration=0;
 const RCCM="CD/BKV/RCCM/24-A-01446", SHOP_PHONE="0974112163", LOCATION="ISP, Bukavu/Sud-Kivu";
 const PAYMENT_METHODS=["Espèces","M-Pesa","Airtel Money","Orange Money","Afrimoney","Virement bancaire","Carte bancaire","Autre"];
 const PERMISSIONS=[
@@ -584,10 +588,10 @@ const CATEGORIES=["Téléphones","Accessoires téléphones","Modes (couture)","C
 const seed={
   role:"seller",currentUserId:null,sessionType:"visitor",visitorSessionId:null,impersonatedByAdminId:null,theme:"light",hideMoney:true,rate:2400,mainCurrency:"USD",activePeriod:"week",
   shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},
-  adminProfile:{name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",phone:""},
+  adminProfile:{name:"Administrateur principal",email:"",phone:""},
   shops:[{id:"main",name:"Boutique principale",location:"ISP, Bukavu/Sud-Kivu"}],
   users:[
-    {id:"u-admin",name:"Administrateur principal",email:"ndagonywaphilemon@gmail.com",password:"202020",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null}
+    {id:"u-admin",name:"Administrateur principal",email:"",accessCode:null,role:"admin",shops:["main"],permissions:["*"],status:"Actif",isPrimary:true,suspendedUntil:null}
   ],
   products:[],
   ads:[],
@@ -603,6 +607,10 @@ const LEGACY_STORAGE_KEYS=["mkg-full-v31","mkg-full-v30","mkg-full-v28","mkg-ful
 let memoryStore=null;
 function storageGet(){
   try{
+    const session=JSON.parse(localStorage.getItem(PERSISTENT_SESSION_KEY)||sessionStorage.getItem(SESSION_KEY)||"null");
+    const owner=session?.user?.id||session?.impersonatedByAdminId||session?.currentUserId||"public";
+    const scoped=localStorage.getItem(`mkg-data-${owner}`);
+    if(scoped)return scoped;
     const raw=window.localStorage.getItem(STORAGE_KEY);
     if(raw) return raw;
     for(const key of LEGACY_STORAGE_KEYS){
@@ -614,9 +622,16 @@ function storageGet(){
 }
 function storageSet(value){
   memoryStore=value;
-  try{window.localStorage.setItem(STORAGE_KEY,value)}catch(e){}
+  const owner=isVisitor()?"public":db.sessionUser?.id||db.impersonatedByAdminId||db.currentUserId;
+  try{window.localStorage.setItem(`mkg-data-${owner}`,value)}catch(e){
+    db.lastSyncError="Stockage local indisponible ou plein : les changements ne survivront pas à une fermeture tant que la sauvegarde échoue.";
+    console.warn(db.lastSyncError);
+  }
 }
-let db;try{const raw=storageGet();db=raw?JSON.parse(raw):clone(seed)}catch(e){db=clone(seed)}
+let db;try{const raw=storageGet();db={...clone(seed),...(raw?JSON.parse(raw):{})}}catch(e){db=clone(seed)}
+// Authentication never comes from the business cache.
+db.sessionType="visitor";db.currentUserId=null;db.role="visitor";db.syncAuth=null;db.impersonatedByAdminId=null;
+(db.users||[]).forEach(u=>delete u.password);
 if(!db.ads) db.ads=[];
 if(!db.orders) db.orders=[];
 if(!db.syncQueue) db.syncQueue=[];
@@ -626,7 +641,7 @@ if(!("syncAuth" in db)) db.syncAuth=null;
 if(!db.deviceId) db.deviceId=uid("device");
 if(!("lastSyncAt" in db)) db.lastSyncAt=null;
 if(!db.sessionType) db.sessionType="visitor";
-if(!("visitorSessionId" in db)) db.visitorSessionId=null;
+if(!db.visitorSessionId)db.visitorSessionId=uid("visitor");
 if(!("impersonatedByAdminId" in db)) db.impersonatedByAdminId=null;
 (db.users||[]).forEach(u=>{
   if(!("accessCode" in u)) u.accessCode=u.role==="admin"?null:String(Math.floor(100000+Math.random()*900000));
@@ -644,12 +659,12 @@ restoreSession();
 
 function ensureLocalPrimaryAdmin(){
   if(!Array.isArray(db.users))db.users=[];
-  let admin=db.users.find(u=>u.isPrimary)||db.users.find(u=>String(u.email||"").toLowerCase()==="ndagonywaphilemon@gmail.com");
+  let admin=db.users.find(u=>u.isPrimary);
   if(!admin){
     admin={
       id:"u-admin",
       name:db.adminProfile?.name||"Administrateur principal",
-      email:db.adminProfile?.email||"ndagonywaphilemon@gmail.com",
+      email:db.adminProfile?.email||"",
       password:null,
       accessCode:null,
       role:"admin",
@@ -673,10 +688,7 @@ function ensureLocalPrimaryAdmin(){
     db.shops.unshift({id:"main",name:"Boutique principale",location:"ISP, Bukavu/Sud-Kivu"})
   }
 
-  if(db.sessionType==="internal"&&db.syncAuth?.type==="admin"){
-    db.currentUserId=admin.id;
-    db.role="admin"
-  }
+
 }
 ensureLocalPrimaryAdmin();
 let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
@@ -685,19 +697,29 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
 function broadcastOrders(){try{orderChannel?.postMessage({type:"refresh"})}catch(e){}}
 window.addEventListener("storage",e=>{
-  if(e.key===STORAGE_KEY&&e.newValue){
-    try{mergeBusinessDataPreservingSession(JSON.parse(e.newValue));render();go(routeForSession(currentRoute()),false)}catch(err){}
+  if(e.key?.startsWith("mkg-data-")&&e.newValue){
+    if(navigator.onLine&&!db.syncQueue.some(x=>x.status==="pending"))checkRemoteRevision();
   }
 });
-if(orderChannel)orderChannel.onmessage=()=>{try{const raw=storageGet();const fresh=raw?JSON.parse(raw):null;if(fresh){mergeBusinessDataPreservingSession(fresh);render();go(routeForSession(currentRoute()),false)}}catch(e){}};
+if(orderChannel)orderChannel.onmessage=()=>{if(navigator.onLine&&!db.syncQueue.some(x=>x.status==="pending"))checkRemoteRevision()};
 
-let syncTimer=null,syncInProgress=false,pullTimer=null;
+let syncTimer=null,syncInProgress=false,pullTimer=null,retryAt=0,retryDelay=1000,authNeedsLogin=false;
+function recordSyncFailure(e){
+  if(e.status===401)authNeedsLogin=true;
+  retryDelay=Math.min(retryDelay*2,60000);retryAt=Date.now()+retryDelay;
+  db.lastSyncError=e.status===401?"Session distante à revalider : reconnectez-vous. Vos modifications sont conservées.":e.message;
+}
 function save(schedule=true){
-  persistBusinessState();saveSession();broadcastOrders();
+  if(schedule)localGeneration++;
+  if(schedule&&!isVisitor()&&db.syncBase&&!db.syncQueue.some(x=>x.status==="pending")&&MkgSync.diff(db.syncBase,sharedState()).length){
+    db.syncQueue.push({id:uid("sync"),type:"business.update",payload:{},status:"pending",createdAt:new Date().toISOString(),sourceUserId:db.sessionUser?.id||db.currentUserId});
+  }
+  persistBusinessState();saveSession();if(schedule)broadcastOrders();
   if(schedule&&navigator.onLine)scheduleAutoSync()
 }
 function queueSync(type,payload={}){
   if(isVisitor()&&type!=="visitor.order"&&type!=="visitor.message")return;
+  localGeneration++;
   db.syncQueue.push({id:uid("sync"),type,payload,createdAt:new Date().toISOString(),status:"pending",sourceUserId:activeUser()?.id||db.visitorSessionId||"visitor"});
   persistBusinessState();saveSession();broadcastOrders();
   if(navigator.onLine)scheduleAutoSync()
@@ -722,23 +744,18 @@ function sharedState(){
   return stripMongoIds({
     rate:db.rate,mainCurrency:db.mainCurrency,hideMoney:db.hideMoney,
     shopSettings:db.shopSettings,adminProfile:db.adminProfile,
-    shops:db.shops||[],users:db.users||[],products:db.products||[],ads:db.ads||[],
+    shops:db.shops||[],users:isTrueAdmin()?(db.users||[]):(db.users||[]).filter(u=>u.id===db.currentUserId),products:db.products||[],ads:db.ads||[],
     sales:db.sales||[],orders:db.orders||[],notifications:db.notifications||[]
   })
 }
-function preserveLocalSecrets(nextUsers){
+function preserveSessionUser(nextUsers){
   const oldUsers=(db.users||[]);
-  const existing=new Map(oldUsers.map(u=>[u.id,u]));
   const merged=(nextUsers||[]).map(u=>{
-    const old=existing.get(u.id)||{};
-    return {...u,password:u.password??old.password,accessCode:u.accessCode??old.accessCode}
+    const {password,...safe}=u;return safe
   });
 
   const current=oldUsers.find(u=>u.id===db.currentUserId);
   if(current&&!merged.some(u=>u.id===current.id))merged.unshift({...current});
-
-  const primary=oldUsers.find(u=>u.isPrimary);
-  if(primary&&!merged.some(u=>u.id===primary.id))merged.unshift({...primary});
 
   return merged
 }
@@ -755,7 +772,7 @@ function applyRemoteState(remote,scope="private"){
   if(scope==="private"){
     if(remote.adminProfile)db.adminProfile=remote.adminProfile;
     if(typeof remote.hideMoney==="boolean")db.hideMoney=remote.hideMoney;
-    if(Array.isArray(remote.users))db.users=preserveLocalSecrets(remote.users);
+    if(Array.isArray(remote.users))db.users=preserveSessionUser(remote.users);
     if(Array.isArray(remote.sales))db.sales=remote.sales;
     if(Array.isArray(remote.orders))db.orders=remote.orders;
     if(Array.isArray(remote.notifications))db.notifications=remote.notifications;
@@ -764,18 +781,16 @@ function applyRemoteState(remote,scope="private"){
     db.orders=[...(db.orders||[]).filter(o=>o.visitorSessionId!==db.visitorSessionId||!ownIds.has(o.id)),...remote.orders]
   }
   restoreSessionSnapshot(__session);
-  ensureLocalPrimaryAdmin();
   saveSession();
 }
 function privateHeaders(){
   const a=db.syncAuth;
   if(!a)return {};
-  if(a.token)return {"x-sync-token":a.token,"x-sync-email":a.email||"","x-sync-type":a.type||"staff"};
-  return {"x-sync-email":a.email||"","x-sync-secret":a.secret||"","x-sync-type":a.type||"staff"}
+  return a.token?{"x-sync-token":a.token}:{}
 }
-async function uploadImageToFirebaseIfNeeded(dataUrl,folder="products"){
+async function uploadMediaIfNeeded(dataUrl,folder="products"){
   if(!dataUrl||typeof dataUrl!=="string"||!dataUrl.startsWith("data:image/"))return dataUrl;
-  const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dataUrl,folder})});
+  const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json",...privateHeaders()},body:JSON.stringify({dataUrl,folder})});
   const j=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
   if(!r.ok||!j.ok||!j.url)throw new Error(j.error||"Upload image Firebase impossible");
   return j.url
@@ -783,77 +798,69 @@ async function uploadImageToFirebaseIfNeeded(dataUrl,folder="products"){
 async function normalizeMediaBeforeSync(){
   let changed=false;
   for(const p of (db.products||[])){
-    if(p?.photo?.startsWith?.("data:image/")){p.photo=await uploadImageToFirebaseIfNeeded(p.photo,"products");changed=true}
+    if(p?.photo?.startsWith?.("data:image/")){p.photo=await uploadMediaIfNeeded(p.photo,"products");changed=true}
   }
   for(const a of (db.ads||[])){
-    if(a?.image?.startsWith?.("data:image/")){a.image=await uploadImageToFirebaseIfNeeded(a.image,"ads");changed=true}
+    if(a?.image?.startsWith?.("data:image/")){a.image=await uploadMediaIfNeeded(a.image,"ads");changed=true}
   }
   if(changed)persistBusinessState()
 }
 async function apiJson(url,options={}){
-  const r=await fetch(url,{cache:"no-store",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
+  const r=await fetch(url,{signal:AbortSignal.timeout(20000),cache:"no-store",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
   const data=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
   if(!r.ok)throw Object.assign(new Error(data.error||`HTTP ${r.status}`),{status:r.status,data});
   return data
 }
 
-async function refreshPublicCatalog(){
-  if(!isVisitor()||!navigator.onLine)return false;
-  try{
-    const data=await apiJson(`/api/sync?scope=public&visitorSessionId=${encodeURIComponent(db.visitorSessionId||"")}`,{method:"GET"});
-    if(data?.state){
-      applyRemoteState(data.state,"public");
-      db.serverRevision=Number(data.revision||db.serverRevision||0);
-      db.lastPullAt=new Date().toISOString();
-      save(false);
-      if(typeof renderStorefront==="function")renderStorefront();
-      return true
-    }
-  }catch(e){}
-  return false
-}
+async function refreshPublicCatalog(){return isVisitor()?pullRemote({silent:true}):false}
 async function pullRemote({silent=true}={}){
   if(!navigator.onLine||syncInProgress)return false;
+  if(db.syncQueue.some(x=>x.status==="pending"))return syncPending({silent});
+  syncInProgress=true;
+  const epoch=sessionEpoch,generation=localGeneration,visitor=isVisitor();
   try{
-    const visitor=isVisitor();
-    const url=visitor?`/api/sync?scope=public&visitorSessionId=${encodeURIComponent(db.visitorSessionId||"")}`:"/api/sync?scope=private";
+    const url=visitor?`/api/sync?scope=public&visitorSessionId=${encodeURIComponent(db.visitorSessionId)}`:"/api/sync?scope=private";
     const data=await apiJson(url,{method:"GET",headers:visitor?{}:privateHeaders()});
+    if(epoch!==sessionEpoch||generation!==localGeneration)return false;
     applyRemoteState(data.state,visitor?"public":"private");
-    db.serverRevision=Number(data.revision||0);db.lastPullAt=new Date().toISOString();
-    save(false);render();return true
-  }catch(e){if(!silent)alert(`Synchronisation impossible : ${e.message}`);return false}
+    db.syncBase=clone(data.state);db.serverRevision=Number(data.revision||0);
+    db.lastPullAt=new Date().toISOString();db.lastSyncError=null;retryAt=0;retryDelay=1000;
+    save(false);render();return true;
+  }catch(e){if(epoch===sessionEpoch){recordSyncFailure(e);if(!silent)alert(e.message)}return false}
+  finally{syncInProgress=false;renderSync()}
 }
 async function syncPending({silent=false}={}){
-  if(!navigator.onLine){if(!silent)alert("Connexion Internet requise pour synchroniser.");renderNetwork();return false}
-  if(syncInProgress)return false;
+  if(!navigator.onLine||syncInProgress)return false;
+  if(!db.syncQueue.some(x=>x.status==="pending"))return pullRemote({silent});
   syncInProgress=true;renderSync();
+  const epoch=sessionEpoch,visitor=isVisitor();
   try{
-    const visitor=isVisitor();
     if(!visitor)await normalizeMediaBeforeSync();
+    if(epoch!==sessionEpoch)return false;
     const pending=db.syncQueue.filter(x=>x.status==="pending");
-    const body=visitor?
-      {action:"syncPublic",deviceId:db.deviceId,visitorSessionId:db.visitorSessionId,orders:(db.orders||[]).filter(o=>o.visitorSessionId===db.visitorSessionId),operations:pending}:
-      {action:"sync",deviceId:db.deviceId,baseRevision:db.serverRevision,state:sharedState(),operations:pending,auth:db.syncAuth};
-    const data=await apiJson("/api/sync",{method:"POST",body:JSON.stringify(body)});
-    applyRemoteState(data.state,visitor?"public":"private");
-    db.serverRevision=Number(data.revision||db.serverRevision||0);
-    const now=new Date().toISOString();
-    db.syncQueue.forEach(x=>{if(x.status==="pending"){x.status="synced";x.syncedAt=now}});
-    db.syncQueue=db.syncQueue.slice(-120);
-    db.lastSyncError=null;db.lastSyncAt=now;db.lastPullAt=now;save(false);render();
-    if(!silent)alert("Synchronisation terminée.");
-    return true
+    const sent=clone(sharedState());
+    // Persist the exact batch for retry after a lost response or a reload.
+    if(!db.inflightSync)db.inflightSync={id:uid("batch"),sent,sentIds:pending.map(x=>x.id),
+      body:visitor?{action:"syncPublic",visitorSessionId:db.visitorSessionId,orders:sent.orders.filter(o=>o.visitorSessionId===db.visitorSessionId)}:
+      {action:"sync",baseRevision:db.serverRevision,state:sent,changes:db.syncBase?MkgSync.diff(db.syncBase,sent):null,operations:pending}
+    };
+    const flight=db.inflightSync;persistBusinessState();
+    const data=await apiJson("/api/sync",{method:"POST",body:JSON.stringify({...flight.body,requestId:flight.id,auth:visitor?undefined:db.syncAuth})});
+    if(epoch!==sessionEpoch)return false;
+    const later=MkgSync.diff(flight.sent,sharedState());
+    applyRemoteState(data.state,visitor?"public":"private");db.syncBase=clone(data.state);
+    if(later.length)applyRemoteState(MkgSync.merge(sharedState(),later,false),visitor?"public":"private");
+    db.serverRevision=Number(data.revision||0);
+    const acknowledged=new Set(flight.sentIds),now=new Date().toISOString();
+    db.syncQueue=db.syncQueue.filter(x=>!acknowledged.has(x.id));
+    delete db.inflightSync;db.lastSyncError=null;retryAt=0;retryDelay=1000;db.lastSyncAt=now;save(false);render();
+    if(db.syncQueue.some(x=>x.status==="pending"))scheduleAutoSync();
+    return true;
   }catch(e){
-    db.lastSyncError=e.message||"Erreur de synchronisation";
-    persistBusinessState();
-    if(e.status===401){
-      // Ne pas déconnecter brutalement l'utilisateur à cause d'un échec
-      // de synchronisation en arrière-plan. La session reste locale et
-      // l'erreur est affichée/retentée automatiquement.
-      console.warn("Session distante à revalider :",e.message);
-    }
-    if(!silent)alert(`Synchronisation impossible : ${e.message}`);
-    return false
+    if(epoch!==sessionEpoch)return false;
+    recordSyncFailure(e);
+    if([400,403,409,413].includes(e.status))delete db.inflightSync;
+    persistBusinessState();if(!silent)alert(db.lastSyncError);return false;
   }finally{syncInProgress=false;renderSync()}
 }
 async function remoteAuthenticate(email,secret,type){
@@ -863,30 +870,32 @@ async function remoteAuthenticate(email,secret,type){
   });
 }
 async function claimOrderRemote(orderId){
+  const epoch=sessionEpoch;
   const data=await apiJson("/api/sync",{method:"POST",body:JSON.stringify({action:"claimOrder",orderId,auth:db.syncAuth})});
+  if(epoch!==sessionEpoch)return null;
   if(data.order){
     const idx=(db.orders||[]).findIndex(o=>o.id===data.order.id);
     if(idx>=0)db.orders[idx]=data.order;else db.orders.push(data.order);
-    db.serverRevision=Number(data.revision||db.serverRevision||0);save(false);render()
+    if(db.syncBase){const rows=db.syncBase.orders||=[];const i=rows.findIndex(o=>o.id===data.order.id);if(i<0)rows.push(clone(data.order));else rows[i]=clone(data.order)}
+    save(false);render()
   }
   return data.order
 }
 async function checkRemoteRevision(){
-  if(document.visibilityState!=="visible"||!navigator.onLine||syncInProgress)return;
+  if(document.visibilityState!=="visible"||!navigator.onLine||syncInProgress||authNeedsLogin||Date.now()<retryAt)return;
   const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
   if(pending){await syncPending({silent:true});return}
   try{
     const r=await apiJson("/api/sync?scope=revision",{method:"GET"});
     const rev=Number(r.revision||0);
     if(rev!==Number(db.serverRevision||0))await pullRemote({silent:true});
-  }catch(e){}
+  }catch(e){recordSyncFailure(e)}
 }
 function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,2000)}
 window.addEventListener("online",()=>{renderNetwork();renderSync();setTimeout(async()=>{const pending=(db.syncQueue||[]).some(x=>x.status==="pending");if(pending)await syncPending({silent:true});await checkRemoteRevision()},150)});
 window.addEventListener("offline",()=>{renderNetwork();renderSync()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)checkRemoteRevision()});
-startRemotePolling();
-function uid(p="id"){return p+"-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6)}
+function uid(p="id"){return p+"-"+crypto.randomUUID()}
 
 async function compressImageFile(file,maxSide=1200,quality=.78){
   if(!file)return "";
@@ -903,20 +912,11 @@ function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&l
 function fmt(v,c="USD"){return c==="USD"?"$"+Number(v||0).toFixed(2):Math.round(Number(v||0)).toLocaleString("fr-FR")+" FC"}
 function usdToCdf(v){return Number(v||0)*db.rate}function cdfToUsd(v){return Number(v||0)/db.rate}
 function displayDate(d){return new Date(d).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}
-function activeUser(){return (db.users||[]).find(u=>u.id===db.currentUserId)||null}
+function activeUser(){return (db.users||[]).find(u=>u.id===db.currentUserId)||db.sessionUser||null}
 function masterAdmin(){return (db.users||[]).find(u=>u.id===db.impersonatedByAdminId)||(db.users||[]).find(u=>u.isPrimary)||null}
-function currentRole(){
-  const u=activeUser();
-  if(u?.role)return u.role;
-  if(db.sessionType==="internal"){
-    if(db.role)return db.role;
-    if(db.syncAuth?.type==="admin")return "admin";
-    return "seller";
-  }
-  return "visitor"
-}
-function isAdmin(){return !isVisitor()&&(currentRole()==="admin"||currentRole()==="manager")}
-function isTrueAdmin(){return !isVisitor()&&(currentRole()==="admin"||db.syncAuth?.type==="admin"||!!db.impersonatedByAdminId)}
+function currentRole(){return isVisitor()?"visitor":db.role}
+function isAdmin(){return !isVisitor()&&["admin","manager"].includes(currentRole())}
+function isTrueAdmin(){return !isVisitor()&&(currentRole()==="admin"||!!db.impersonatedByAdminId)}
 function hasPermission(key){
   if(isVisitor())return false;
   if(isTrueAdmin())return true;
@@ -925,22 +925,22 @@ function hasPermission(key){
   return u.permissions?.includes("*")||u.permissions?.includes(key)
 }
 function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
-function isVisitor(){return db.sessionType==="visitor"}
+function isVisitor(){return db.sessionType!=="internal"||!db.syncAuth?.token}
 
-const SESSION_KEY="mkg-session-v32";
-const PERSISTENT_SESSION_KEY="mkg-auth-session-v32";
-function sessionSnapshot(){return {sessionType:db.sessionType,currentUserId:db.currentUserId,impersonatedByAdminId:db.impersonatedByAdminId,role:db.role,syncAuth:db.syncAuth?{...db.syncAuth}:null}}
-function restoreSessionSnapshot(s){if(!s)return;db.sessionType=s.sessionType;db.currentUserId=s.currentUserId;db.impersonatedByAdminId=s.impersonatedByAdminId;db.role=s.role;db.syncAuth=s.syncAuth}
+function sessionSnapshot(){return {sessionType:db.sessionType,currentUserId:db.currentUserId,impersonatedByAdminId:db.impersonatedByAdminId,role:db.role,syncAuth:db.syncAuth?{...db.syncAuth}:null,user:db.sessionUser||activeUser()}}
+function restoreSessionSnapshot(s){if(!s)return;db.sessionType=s.sessionType;db.currentUserId=s.currentUserId;db.impersonatedByAdminId=s.impersonatedByAdminId;db.role=s.role;db.syncAuth=s.syncAuth;db.sessionUser=s.user||null}
 function persistentSessionSnapshot(){
-  const s=sessionSnapshot();
+  const s=clone(sessionSnapshot());
+  if(s.user){delete s.user.password;delete s.user.accessCode}
   if(s.syncAuth){
     s.syncAuth={email:s.syncAuth.email||"",type:s.syncAuth.type||"staff",token:s.syncAuth.token||""};
   }
   return s
 }
 function saveSession(){
+  if(isVisitor()){clearSession();return}
   const snap=persistentSessionSnapshot();
-  try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(snap))}catch(e){}
+  try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}
   try{localStorage.setItem(PERSISTENT_SESSION_KEY,JSON.stringify(snap))}catch(e){}
 }
 function clearSession(){
@@ -949,31 +949,35 @@ function clearSession(){
 }
 function restoreSession(){
   try{
-    const raw=sessionStorage.getItem(SESSION_KEY)||localStorage.getItem(PERSISTENT_SESSION_KEY);
+    const raw=localStorage.getItem(PERSISTENT_SESSION_KEY)||sessionStorage.getItem(SESSION_KEY);
     const s=JSON.parse(raw||"null");
     if(s?.sessionType==="internal"&&s.currentUserId&&s.syncAuth?.token){
       restoreSessionSnapshot(s);
-      try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(s))}catch(e){}
+      try{localStorage.setItem(PERSISTENT_SESSION_KEY,JSON.stringify(s));sessionStorage.removeItem(SESSION_KEY)}catch(e){}
     }
   }catch(e){}
 }
 function businessSnapshot(){
   const out=stripMongoIds?stripMongoIds(db):JSON.parse(JSON.stringify(db));
-  delete out.sessionType;delete out.currentUserId;delete out.impersonatedByAdminId;delete out.role;delete out.syncAuth;
+  delete out.sessionType;delete out.currentUserId;delete out.impersonatedByAdminId;delete out.role;delete out.syncAuth;delete out.sessionUser;
+  (out.users||[]).forEach(u=>delete u.password);
   return out
 }
 function persistBusinessState(){storageSet(JSON.stringify(businessSnapshot()))}
-function mergeBusinessDataPreservingSession(fresh){
-  const s=sessionSnapshot();
-  // Session/auth belongs to this tab only and must never come from localStorage/MongoDB.
-  const keepVisitorSessionId=db.visitorSessionId;
-  db=fresh;
-  db.visitorSessionId=db.visitorSessionId||keepVisitorSessionId||null;
-  restoreSessionSnapshot(s);
+function scrubLegacySecrets(){
+  for(const key of [STORAGE_KEY,...LEGACY_STORAGE_KEYS]){
+    try{
+      const raw=localStorage.getItem(key);if(!raw)continue;
+      const clean=JSON.parse(raw,(field,value)=>["password","secret"].includes(field)?undefined:value);
+      delete clean.syncAuth;delete clean.sessionType;delete clean.currentUserId;delete clean.role;delete clean.impersonatedByAdminId;
+      localStorage.setItem(key,JSON.stringify(clean));
+    }catch(e){console.warn("Ancien cache non migré",key)}
+  }
 }
 function currentRoute(){return (location.hash||"").replace(/^#/,"")|| (isVisitor()?"storefront":"home")}
 function routeForSession(id){
   if(isVisitor()) return ["storefront","visitorChat"].includes(id)?id:"storefront";
+  if(id==="shop")id="shops";
   if(["storefront","visitorChat"].includes(id)) return "home";
   return id;
 }
@@ -984,9 +988,8 @@ function orderTotalUsd(o){return (o.items||[]).reduce((a,i)=>a+i.sell*i.qty,0)}
 function orderTotalCdf(o){return orderTotalUsd(o)*db.rate}
 
 function isSuspended(u){
-  if(!u?.suspendedUntil)return false;
-  if(new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif";queueSync("staff.resume",{userId:u.id});save();return false}
-  return true
+  if(!u)return false;
+  return u.suspendedUntil?new Date(u.suspendedUntil).getTime()>Date.now():u.status==="Suspendu";
 }
 function saleActive(s){return s.status!=="Annulée"}function saleAgeMin(s){return(Date.now()-new Date(s.createdAt).getTime())/60000}
 function notify(title,body){db.notifications.unshift({id:uid("n"),title,body,date:new Date().toISOString(),read:false});db.notifications=db.notifications.slice(0,80);save()}
@@ -998,7 +1001,7 @@ function saleProfit(s){return s.items.reduce((a,i)=>a+(i.sell-i.buy)*i.qty,0)}
 function availableShops(){if(isVisitor())return db.shops.filter(s=>s.id==="main");const u=activeUser();if(isTrueAdmin())return db.shops;return db.shops.filter(s=>u?.shops?.includes(s.id))}
 function selectedShopIds(){if(currentShop==="all")return availableShops().map(s=>s.id);return[currentShop]}
 
-function ensureDemoSales(){ return; }
+
 
 
 function renderNetwork(){
@@ -1013,14 +1016,13 @@ function renderSync(){
   if(label){
     if(syncInProgress)label.textContent="Synchronisation automatique…";
     else if(!navigator.onLine)label.textContent="Hors connexion · sauvegarde locale active";
-    else if(db.lastSyncError)label.textContent=`Nouvel essai automatique · ${db.lastSyncError}`;
+    else if(db.lastSyncError)label.textContent=db.lastSyncError;
     else if(db.lastSyncAt)label.textContent=`Synchronisé automatiquement · ${displayDate(db.lastSyncAt)} · r${db.serverRevision||0}`;
     else label.textContent="Synchronisation automatique active";
   }
 }
 
 function render(){
- normalizeSuspensions();
  document.body.classList.toggle("visitor-mode",isVisitor());
  document.body.classList.toggle("internal-mode",!isVisitor());
  document.body.classList.toggle("admin-impersonating",!!db.impersonatedByAdminId);
@@ -1088,7 +1090,7 @@ function renderDashboard(){
  $("#profitMetric").textContent=fmt(profit);$("#profitCdfMetric").textContent=`Équiv. ${fmt(usdToCdf(profit),"CDF")}`;
  $("#salesMetric").textContent=sales.length;$("#itemsMetric").textContent=`${items} article(s) vendu(s)`;$("#stockMetric").textContent=db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock<=3).length;
  const recent=sales.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,7);
- $("#recentSales").innerHTML=recent.map(s=>`<tr><td>${s.receipt}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}</td><td>${esc(s.sellerName)}</td></tr>`).join("")||`<tr><td colspan="8" class="muted">Aucune vente.</td></tr>`;
+ $("#recentSales").innerHTML=recent.map(s=>`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}</td><td>${esc(s.sellerName)}</td></tr>`).join("")||`<tr><td colspan="8" class="muted">Aucune vente.</td></tr>`;
  $("#recentSalesFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(rev)}<br><span class="tiny">${fmt(usdToCdf(rev),"CDF")}</span></td><td class="adminOnly">${fmt(cost)}</td><td class="adminOnly">${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
@@ -1096,7 +1098,7 @@ function renderProducts(){
  const q=$("#productSearch").value.toLowerCase(),cat=$("#categoryFilter").value,ids=selectedShopIds();
  const rows=db.products.filter(p=>ids.includes(p.shopId)&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
  $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-p.buy,stockProfit=pu*p.stock;return`<tr>
- <td><div class="product">${p.photo?`<img class="thumb" src="${p.photo}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
+ <td><div class="product">${p.photo?`<img class="thumb" src="${esc(p.photo)}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
  <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(usdToCdf(p.buy),"CDF"):fmt(p.buy)}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(p.buy):fmt(usdToCdf(p.buy),"CDF")}</td>
  <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(Number(p.sell)||0),"CDF"):fmt(Number(p.sell)||0)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
  <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td>
@@ -1112,27 +1114,21 @@ function renderProducts(){
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
 function renderSales(){
- const q=$("#saleSearch").value.toLowerCase(),ids=selectedShopIds();const rows=db.sales.filter(s=>ids.includes(s.shopId)&&(!q||`${s.receipt} ${s.buyerName} ${s.sellerName} ${s.items.map(i=>i.name).join(" ")}`.toLowerCase().includes(q))).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+ const q=$("#saleSearch").value.toLowerCase(),ids=selectedShopIds();const rows=db.sales.filter(s=>ids.includes(s.shopId)&&(!q||`${esc(s.receipt)} ${s.buyerName} ${s.sellerName} ${s.items.map(i=>i.name).join(" ")}`.toLowerCase().includes(q))).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
  $("#salesTable").innerHTML=rows.map(s=>{let actions=`<button class="btn alt small" onclick="showReceipt('${s.id}')">Reçu</button> `;const age=saleAgeMin(s);if(isAdmin()&&s.status!=="Annulée"){actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;if(s.pendingRequest)actions+=` <button class="btn small" onclick="approveRequest('${s.id}')">Approuver</button>`}else if(!isAdmin()&&s.status!=="Annulée"){if(age<=db.shopSettings.correctionWindowMin)actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;else actions+=`<button class="btn alt small" onclick="requestApproval('${s.id}','edit')">Demander correction</button> <button class="btn alt small" onclick="requestApproval('${s.id}','cancel')">Demander annulation</button>`}
- return`<tr><td>${s.receipt}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly">${fmt(saleListPrice(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}<br><span class="tiny">${fmt(usdToCdf(saleProfit(s)),"CDF")}</span></td><td><span class="pill ${s.status==="Annulée"?"red":"green"}">${s.status}</span></td><td class="nowrap">${actions}</td></tr>`}).join("");
+ return`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly">${fmt(saleListPrice(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}<br><span class="tiny">${fmt(usdToCdf(saleProfit(s)),"CDF")}</span></td><td><span class="pill ${s.status==="Annulée"?"red":"green"}">${s.status}</span></td><td class="nowrap">${actions}</td></tr>`}).join("");
  const active=rows.filter(s=>saleActive(s)),totalPaidUsd=active.reduce((a,s)=>a+s.usdEquivalent,0),totalCost=active.reduce((a,s)=>a+saleCost(s),0),totalSale=active.reduce((a,s)=>a+saleListPrice(s),0),totalProfit=active.reduce((a,s)=>a+saleProfit(s),0);
  $("#salesFoot").innerHTML=`<tr><td colspan="4">TOTAUX</td><td>${fmt(totalPaidUsd)}<br><span class="tiny">${fmt(usdToCdf(totalPaidUsd),"CDF")}</span></td><td class="adminOnly">${fmt(totalCost)}</td><td class="adminOnly">${fmt(totalSale)}</td><td class="adminOnly">${fmt(totalProfit)}<br><span class="tiny">${fmt(usdToCdf(totalProfit),"CDF")}</span></td><td colspan="2"></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
-function normalizeSuspensions(){
-  let changed=false;
-  db.users.forEach(u=>{if(u.suspendedUntil&&new Date(u.suspendedUntil).getTime()<=Date.now()){u.suspendedUntil=null;u.status="Actif";changed=true}});
-  if(changed)save()
-}
 function renderStaff(){
-  normalizeSuspensions();
   const me=activeUser();
   const users=isTrueAdmin()?db.users:db.users.filter(u=>u.id===me?.id);
   $("#staffTable").innerHTML=users.map(u=>{
     const suspended=isSuspended(u);
-    const status=suspended?"Suspendu":(u.status||"Actif");
+    const status=suspended?"Suspendu":"Actif";
     const until=suspended?displayDate(u.suspendedUntil):"—";
-    const code=u.role==="admin"?"Mot de passe":(u.accessCode||"Non généré");
+    const code=u.isPrimary?"Mot de passe":(u.accessCode||"Non généré");
     let actions="—";
     if(isTrueAdmin()&&!u.isPrimary){
       actions=[
@@ -1143,7 +1139,7 @@ function renderStaff(){
       ].join(" ")
     }else if(u.isPrimary){actions='<span class="pill">Compte maître protégé</span>'}
     return `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><span class="pill">${roleLabel(u.role)}</span></td>
-      <td>${u.shops.map(id=>db.shops.find(s=>s.id===id)?.name).filter(Boolean).join(", ")||"—"}</td>
+      <td>${u.shops.map(id=>db.shops.find(s=>s.id===id)?.name).filter(Boolean).map(esc).join(", ")||"—"}</td>
       <td>${u.role==="admin"?"••••••":`<span class="accessCode" style="font-size:12px;padding:5px 7px">${esc(code)}</span>`}</td>
       <td><span class="pill ${suspended?"red":"green"}">${status}</span></td><td>${until}</td><td class="nowrap">${actions}</td></tr>`
   }).join("")
@@ -1197,8 +1193,7 @@ $("#saveAccessBtn").onclick=()=>{
   if(!shops.length)return alert("Attribuez au moins une boutique.");
   const perms=$$("#accessPermissionChecks input:checked").map(x=>x.value);
   u.role=role;u.shops=shops;u.permissions=role==="admin"?["*"]:perms;
-  if(role!=="admin")u.accessCode=$("#accessCodeDisplay").textContent.trim();
-  else u.accessCode=null;
+  if(!u.isPrimary)u.accessCode=$("#accessCodeDisplay").textContent.trim();
   u.status="Actif";u.suspendedUntil=null;
   queueSync("staff.access",{userId:u.id,role:u.role,shops:u.shops,permissions:u.permissions});
   notify("Accès modifiés",`${u.name} : rôle ${roleLabel(u.role)} et autorisations mis à jour.`);
@@ -1274,7 +1269,9 @@ function allowedPage(id){
   if(isVisitor()) return ["storefront","visitorChat"].includes(id) ? id : "storefront";
   const known=["home","sales","products","staff","shops","reports","orders","settings","receipt"];
   if(!known.includes(id)) return "home";
-  if(id==="reports"&&!isAdmin()) return "home";
+  if(id==="reports"&&!hasPermission("reports.view")) return "home";
+  if(id==="staff"&&!hasPermission("staff.manage"))return "home";
+  if(id==="shops"&&!hasPermission("shops.manage"))return "home";
   if(id==="settings"&&!isTrueAdmin()) return "home";
   return id
 }
@@ -1353,12 +1350,12 @@ function saleProducts(){return db.products.filter(p=>selectedShopIds().includes(
 function openSale(id=null){editingSaleId=id;$("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");$("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";if(id){const s=db.sales.find(x=>x.id===id),i=s.items[0];$("#buyerName").value=s.buyerName;$("#buyerPhone").value=s.buyerPhone;$("#saleProduct").value=i.productId;$("#saleQty").value=i.qty;$("#saleCurrency").value=s.currency;$("#salePaymentMethod").value=s.paymentMethod||"Espèces";$("#salePaymentRef").value=s.paymentRef||"";$("#salePaid").value=s.paidTotal}else{$("#buyerName").value="";$("#buyerPhone").value="";$("#saleQty").value=1;$("#saleCurrency").value="USD";$("#salePaymentMethod").value="Espèces";$("#salePaymentRef").value="";$("#salePaid").value=""}updateSaleTotal();openModal("saleModal")}
 function updateSaleTotal(){const p=db.products.find(x=>x.id===$("#saleProduct").value),q=Math.max(1,Number($("#saleQty").value)||1),c=$("#saleCurrency").value;if(!p)return;$("#saleUnitUsd").value=fmt(p.sell);$("#saleUnitCdf").value=fmt(usdToCdf(p.sell),"CDF");$("#saleTotalUsd").value=fmt(p.sell*q);$("#saleTotalCdf").value=fmt(usdToCdf(p.sell*q),"CDF");$("#saleProfitPreview").value=`${fmt((p.sell-p.buy)*q)} / ${fmt(usdToCdf((p.sell-p.buy)*q),"CDF")}`;if(!editingSaleId)$("#salePaid").value=c==="USD"?(p.sell*q).toFixed(2):Math.round(usdToCdf(p.sell*q))}
 $("#saleProduct").onchange=updateSaleTotal;$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
-$("#saveSaleBtn").onclick=()=>{const p=db.products.find(x=>x.id===$("#saleProduct").value),qty=Math.max(1,Number($("#saleQty").value)||1),cur=$("#saleCurrency").value,paid=Number($("#salePaid").value);if(!p)return alert("Aucun article.");if(!paid)return alert("Montant payé requis.");if(editingSaleId){const s=db.sales.find(x=>x.id===editingSaleId),old=s.items[0],op=db.products.find(x=>x.id===old.productId);if(op)op.stock+=old.qty;if(p.stock<qty){if(op)op.stock-=old.qty;return alert("Stock insuffisant")}p.stock-=qty;s.buyerName=$("#buyerName").value.trim();s.buyerPhone=$("#buyerPhone").value.trim();s.currency=cur;s.paymentMethod=$("#salePaymentMethod").value;s.paymentRef=$("#salePaymentRef").value.trim();s.paidTotal=paid;s.rateUsed=db.rate;s.usdEquivalent=cur==="USD"?paid:paid/db.rate;s.items=[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}];s.updatedAt=new Date().toISOString();s.status="Corrigée";delete s.pendingRequest;queueSync("sale.update",{saleId:s.id});notify("Vente corrigée",`${s.receipt} corrigée.`);currentReceiptSaleId=s.id}else{if(p.stock<qty)return alert("Stock insuffisant");p.stock-=qty;const u=activeUser(),s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:p.shopId,buyerName:$("#buyerName").value.trim(),buyerPhone:$("#buyerPhone").value.trim(),sellerId:u?.id||"",sellerName:u?.name||"Utilisateur",currency:cur,paymentMethod:$("#salePaymentMethod").value,paymentRef:$("#salePaymentRef").value.trim(),rateUsed:db.rate,paidTotal:paid,usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]};db.sales.push(s);currentReceiptSaleId=s.id;queueSync("sale.create",{saleId:s.id});notify("Nouvelle vente",`${s.receipt} · ${fmt(s.paidTotal,s.currency)}`)}save();editingSaleId=null;closeModals();render();showReceipt(currentReceiptSaleId)};
+$("#saveSaleBtn").onclick=()=>{const p=db.products.find(x=>x.id===$("#saleProduct").value),qty=Math.max(1,Number($("#saleQty").value)||1),cur=$("#saleCurrency").value,paid=Number($("#salePaid").value);if(!p)return alert("Aucun article.");if(!paid)return alert("Montant payé requis.");if(editingSaleId){const s=db.sales.find(x=>x.id===editingSaleId),old=s.items[0],op=db.products.find(x=>x.id===old.productId);if(op)op.stock+=old.qty;if(p.stock<qty){if(op)op.stock-=old.qty;return alert("Stock insuffisant")}p.stock-=qty;s.buyerName=$("#buyerName").value.trim();s.buyerPhone=$("#buyerPhone").value.trim();s.currency=cur;s.paymentMethod=$("#salePaymentMethod").value;s.paymentRef=$("#salePaymentRef").value.trim();s.paidTotal=paid;s.rateUsed=db.rate;s.usdEquivalent=cur==="USD"?paid:paid/db.rate;s.items=[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}];s.updatedAt=new Date().toISOString();s.status="Corrigée";delete s.pendingRequest;queueSync("sale.update",{saleId:s.id});notify("Vente corrigée",`${esc(s.receipt)} corrigée.`);currentReceiptSaleId=s.id}else{if(p.stock<qty)return alert("Stock insuffisant");p.stock-=qty;const u=activeUser(),s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:p.shopId,buyerName:$("#buyerName").value.trim(),buyerPhone:$("#buyerPhone").value.trim(),sellerId:u?.id||"",sellerName:u?.name||"Utilisateur",currency:cur,paymentMethod:$("#salePaymentMethod").value,paymentRef:$("#salePaymentRef").value.trim(),rateUsed:db.rate,paidTotal:paid,usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]};db.sales.push(s);currentReceiptSaleId=s.id;queueSync("sale.create",{saleId:s.id});notify("Nouvelle vente",`${esc(s.receipt)} · ${fmt(s.paidTotal,s.currency)}`)}save();editingSaleId=null;closeModals();render();showReceipt(currentReceiptSaleId)};
 window.editSale=id=>{const s=db.sales.find(x=>x.id===id);if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"edit");openSale(id)};
-window.cancelSale=id=>{const s=db.sales.find(x=>x.id===id);if(!s||s.status==="Annulée")return;if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"cancel");if(!confirm(`Annuler ${s.receipt} ?`))return;s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";queueSync("sale.cancel",{saleId:s.id});notify("Vente annulée",`${s.receipt} annulée.`);save();render()};
+window.cancelSale=id=>{const s=db.sales.find(x=>x.id===id);if(!s||s.status==="Annulée")return;if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"cancel");if(!confirm(`Annuler ${esc(s.receipt)} ?`))return;s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";queueSync("sale.cancel",{saleId:s.id});notify("Vente annulée",`${esc(s.receipt)} annulée.`);save();render()};
 window.requestApproval=(id,type)=>{approvalContext={id,type};$("#approvalReason").value="";openModal("approvalModal")};
-$("#sendApprovalBtn").onclick=()=>{const s=db.sales.find(x=>x.id===approvalContext?.id);if(!s)return;s.pendingRequest={type:approvalContext.type,reason:$("#approvalReason").value.trim(),requestedAt:new Date().toISOString()};notify("Approbation requise",`${s.receipt} : demande de ${approvalContext.type==="cancel"?"annulation":"correction"}.`);save();approvalContext=null;closeModals();render()};
-window.approveRequest=id=>{const s=db.sales.find(x=>x.id===id);if(!s?.pendingRequest)return;if(s.pendingRequest.type==="cancel"){s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";delete s.pendingRequest;notify("Demande approuvée",`${s.receipt} annulée.`);save();render()}else{delete s.pendingRequest;save();render();openSale(id)}};
+$("#sendApprovalBtn").onclick=()=>{const s=db.sales.find(x=>x.id===approvalContext?.id);if(!s)return;s.pendingRequest={type:approvalContext.type,reason:$("#approvalReason").value.trim(),requestedAt:new Date().toISOString()};notify("Approbation requise",`${esc(s.receipt)} : demande de ${approvalContext.type==="cancel"?"annulation":"correction"}.`);save();approvalContext=null;closeModals();render()};
+window.approveRequest=id=>{const s=db.sales.find(x=>x.id===id);if(!s?.pendingRequest)return;if(s.pendingRequest.type==="cancel"){s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";delete s.pendingRequest;notify("Demande approuvée",`${esc(s.receipt)} annulée.`);save();render()}else{delete s.pendingRequest;save();render();openSale(id)}};
 
 function productPriceToUsd(amount,currency){
   amount=Number(amount)||0;
@@ -1402,7 +1399,7 @@ $("#saveProductBtn").onclick=async()=>{
     if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
     photo=await compressImageFile(f);
     if(navigator.onLine){
-      try{photo=await uploadImageToFirebaseIfNeeded(photo,"products")}
+      try{photo=await uploadMediaIfNeeded(photo,"products")}
       catch(e){return alert(`La photo n’a pas pu être enregistrée : ${e.message}`)}
     }
   }
@@ -1495,9 +1492,15 @@ alert(`Compte ${roleLabel(role)} créé. Code d’accès à remettre à ${n} : $
 
 
 window.enterVisitorMode=()=>{
+  if(!isVisitor()&&db.syncQueue.some(x=>x.status==="pending")){
+    try{localStorage.setItem(`mkg-pending-${db.sessionUser?.id||db.currentUserId}`,JSON.stringify(businessSnapshot()))}
+    catch{return alert("Sauvegarde locale impossible. Libérez de l’espace avant de vous déconnecter pour conserver vos modifications.")}
+  }
+  sessionEpoch++;authNeedsLogin=false;retryAt=0;
   db.sessionType="visitor";db.currentUserId=null;db.impersonatedByAdminId=null;db.role="seller";db.syncAuth=null;clearSession();
   if(!db.visitorSessionId) db.visitorSessionId=uid("visitor");
   currentShop="main";
+  db.sessionUser=null;db.syncQueue=[];db.users=[];db.sales=[];db.notifications=[];db.orders=db.orders.filter(o=>o.visitorSessionId===db.visitorSessionId);delete db.syncBase;delete db.inflightSync;
   save(false);closeModals();render();go("storefront",true);
   if(navigator.onLine)setTimeout(()=>refreshPublicCatalog(),100)
 };
@@ -1510,6 +1513,7 @@ $("#loginType").onchange=()=>{
 $("#stayVisitorBtn").onclick=()=>{closeModals();enterVisitorMode()};
 $("#publicLoginBtn").onclick=()=>openModal("accountModal");
 $("#loginBtn").onclick=async()=>{
+  const loginEpoch=sessionEpoch;
   const btn=$("#loginBtn");
   const email=$("#loginEmail").value.trim().toLowerCase();
   const secret=$("#loginPassword").value.trim();
@@ -1530,56 +1534,61 @@ $("#loginBtn").onclick=async()=>{
   try{
     let u=null;
     let authToken="";
+    let initialRemote=null;
 
     // En ligne : toujours demander au serveur Firebase/Vercel de valider
     // les identifiants afin d'obtenir le jeton persistant.
     if(navigator.onLine){
+      if(isVisitor()&&db.syncQueue.some(x=>x.status==="pending")&&!await syncPending({silent:true}))throw new Error("Vos commandes attendent leur envoi. Réessayez lorsque la connexion est rétablie.");
       const authResult=await remoteAuthenticate(email,secret,type);
-      if(!authResult?.user)throw new Error("Réponse d’authentification invalide.");
+      if(loginEpoch!==sessionEpoch)return;
+      if(!authResult?.user||!authResult.token)throw new Error("Réponse d’authentification invalide.");
 
       authToken=authResult.token||"";
+      initialRemote=authResult;
       const remote=authResult.user;
+      const owner=db.sessionUser?.id||db.currentUserId;
+      if(owner&&owner!==remote.id){
+        if(db.syncQueue.some(x=>x.status==="pending"))localStorage.setItem(`mkg-pending-${owner}`,JSON.stringify(businessSnapshot()));
+        const visitorSessionId=db.visitorSessionId;
+        db={...clone(seed),...JSON.parse(localStorage.getItem(`mkg-data-${remote.id}`)||"{}"),visitorSessionId};
+      }
       const existing=(db.users||[]).find(x=>x.id===remote.id);
       const localUser={...remote};
-
-      // Gardé uniquement dans la mémoire métier locale pour le secours hors ligne.
-      // Le mot de passe n'est pas mis dans la session persistante.
-      if(type==="admin")localUser.password=secret;
-      else localUser.accessCode=secret;
 
       if(existing)Object.assign(existing,localUser);
       else db.users.push(localUser);
 
       u=(db.users||[]).find(x=>x.id===remote.id);
     }else{
-      // Hors ligne : utilisation uniquement des identifiants déjà connus
-      // sur cet appareil.
-      u=(db.users||[]).find(x=>String(x.email||"").toLowerCase()===email);
-      const localOk=u&&!isSuspended(u)&&(
-        type==="admin"
-          ? (u.role==="admin"&&u.isPrimary&&u.password===secret)
-          : (u.role!=="admin"&&u.accessCode===secret)
-      );
-      if(!localOk)throw new Error("Identifiants non reconnus hors connexion sur cet appareil.");
+      throw new Error("Une première connexion nécessite Internet. Une session ouverte reste disponible hors connexion.");
     }
 
     if(!u)throw new Error("Utilisateur introuvable.");
     if(isSuspended(u))throw new Error(`Compte suspendu jusqu’au ${displayDate(u.suspendedUntil)}.`);
 
+    // Restore unsent work only after the server authenticates its owner.
+    const pendingKey=`mkg-pending-${u.id}`;
+    try{const archived=localStorage.getItem(pendingKey);if(archived){db={...db,...JSON.parse(archived)};localStorage.removeItem(pendingKey)}}catch(e){console.warn("File locale indisponible")}
+    sessionEpoch++;authNeedsLogin=false;retryAt=0;retryDelay=1000;
+    db.sessionUser=clone(u);
     db.syncAuth={
       email,
       type,
       token:authToken,
-      secret:authToken?null:secret
+
     };
     db.currentUserId=u.id;
     db.impersonatedByAdminId=null;
-    db.role=(type==="admin"?"admin":u.role);
+    db.role=u.role;
+    $("#loginPassword").value="";
     db.sessionType="internal";
+    if(initialRemote?.state&&!db.syncQueue.some(x=>x.status==="pending")){
+      applyRemoteState(initialRemote.state,"private");db.syncBase=clone(initialRemote.state);db.serverRevision=Number(initialRemote.revision||0);
+    }
 
-    if(type==="admin"){
+    if(u.role==="admin"){
       u.role="admin";
-      u.isPrimary=true;
       u.permissions=["*"];
       if(!Array.isArray(u.shops)||!u.shops.length)u.shops=["main"];
     }
@@ -1601,7 +1610,7 @@ $("#loginBtn").onclick=async()=>{
       try{
         const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
         if(pending)await syncPending({silent:true});
-        else await pullRemote({silent:true});
+        else if(!initialRemote?.state)await pullRemote({silent:true});
       }catch(e){
         console.warn("Synchronisation post-connexion:",e);
       }
@@ -1609,7 +1618,7 @@ $("#loginBtn").onclick=async()=>{
       ensureLocalPrimaryAdmin();
       saveSession();
       render();
-      go("home",false);
+
     }
   }catch(e){
     console.error("LOGIN_ERROR",e);
@@ -1641,12 +1650,7 @@ $("#saveSettingsBtn").onclick=()=>{
   if(!newLocation)return alert("Indiquez la localisation à afficher sur le reçu.");
   db.adminProfile={name:$("#adminName").value.trim(),email:$("#adminEmail").value.trim(),phone:$("#adminPhone").value.trim()};
   const np=$("#adminNewPassword").value,cp=$("#adminConfirmPassword").value;
-  if(np||cp){
-    if(np.length<6)return alert("Le nouveau mot de passe doit contenir au moins 6 caractères.");
-    if(np!==cp)return alert("Les mots de passe ne correspondent pas.");
-    const primary=db.users.find(u=>u.isPrimary);if(primary)primary.password=np;
-    $("#adminNewPassword").value="";$("#adminConfirmPassword").value=""
-  }
+  if(np||cp)return alert("Le mot de passe administrateur se modifie dans ADMIN_PASSWORD sur Vercel. Aucun mot de passe n’est enregistré dans ce navigateur.");
   db.rate=Math.max(1,Number($("#rateInput").value)||2400);
   db.mainCurrency=$("#mainCurrency").value;
   db.shopSettings={phone:newPhone,rccm:newRccm,receiptLocation:newLocation,correctionWindowMin:newDelay};
@@ -1659,7 +1663,7 @@ $("#saveSettingsBtn").onclick=()=>{
 };
 
 window.markAllRead=()=>{db.notifications.forEach(n=>n.read=true);save();renderNotifications()};
-function receiptHtml(s){return`<div class="c"><b>MKG-W4F M'MEDPREN</b><br>MUNDU KU GUNDI WORK4FUTURE M'MEDPREN<br>${esc(db.shopSettings.receiptLocation)}<br>RCCM : ${esc(db.shopSettings.rccm)}<br>Tél./WhatsApp : ${esc(db.shopSettings.phone)}</div><hr><b>Reçu :</b> ${s.receipt}<br><b>Réf. :</b> ${s.ref}<br><b>Date :</b> ${displayDate(s.createdAt)}<br><b>Vendeur :</b> ${esc(s.sellerName)}<br><b>Moyen de paiement :</b> ${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><b>Réf. paiement :</b> ${esc(s.paymentRef)}`:""}<hr>${s.buyerName||s.buyerPhone?`<b>Acheteur :</b> ${esc(s.buyerName||"—")}<br><b>WhatsApp/Tél. :</b> ${esc(s.buyerPhone||"—")}<hr>`:""}${s.items.map(i=>`<div class="r"><span>${esc(i.name)} × ${i.qty}</span><b>${fmt((s.currency==="USD"?i.sell:i.sell*s.rateUsed)*i.qty,s.currency)}</b></div>`).join("")}<hr><div class="r"><b>TOTAL PAYÉ</b><b>${fmt(s.paidTotal,s.currency)}</b></div><div class="c" style="font-size:10px;margin-top:10px">Paiement en ${s.currency}. Merci pour votre confiance.</div><div class="barcode" style="margin-top:10px">||| |||| | ||| ||||| || |||</div><div class="c" style="font-size:9px">${s.ref}</div>`}
+function receiptHtml(s){return`<div class="c"><b>MKG-W4F M'MEDPREN</b><br>MUNDU KU GUNDI WORK4FUTURE M'MEDPREN<br>${esc(db.shopSettings.receiptLocation)}<br>RCCM : ${esc(db.shopSettings.rccm)}<br>Tél./WhatsApp : ${esc(db.shopSettings.phone)}</div><hr><b>Reçu :</b> ${esc(s.receipt)}<br><b>Réf. :</b> ${esc(s.ref)}<br><b>Date :</b> ${displayDate(s.createdAt)}<br><b>Vendeur :</b> ${esc(s.sellerName)}<br><b>Moyen de paiement :</b> ${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><b>Réf. paiement :</b> ${esc(s.paymentRef)}`:""}<hr>${s.buyerName||s.buyerPhone?`<b>Acheteur :</b> ${esc(s.buyerName||"—")}<br><b>WhatsApp/Tél. :</b> ${esc(s.buyerPhone||"—")}<hr>`:""}${s.items.map(i=>`<div class="r"><span>${esc(i.name)} × ${i.qty}</span><b>${fmt((s.currency==="USD"?i.sell:i.sell*s.rateUsed)*i.qty,s.currency)}</b></div>`).join("")}<hr><div class="r"><b>TOTAL PAYÉ</b><b>${fmt(s.paidTotal,s.currency)}</b></div><div class="c" style="font-size:10px;margin-top:10px">Paiement en ${esc(s.currency)}. Merci pour votre confiance.</div><div class="barcode" style="margin-top:10px">||| |||| | ||| ||||| || |||</div><div class="c" style="font-size:9px">${esc(s.ref)}</div>`}
 window.showReceipt=id=>{const s=db.sales.find(x=>x.id===id);if(!s)return;currentReceiptSaleId=id;$("#receiptPreview").innerHTML=receiptHtml(s);go("receipt")};$("#printReceiptBtn").onclick=()=>{const s=db.sales.find(x=>x.id===currentReceiptSaleId);if(s){$("#receiptPrint").innerHTML=receiptHtml(s);window.print()}};
 
 function csvDownload(name,rows){const csv="\ufeff"+rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";")).join("\n"),blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
@@ -1755,13 +1759,9 @@ $("#printDashboardBtn").onclick=()=>printTable("MKG-W4F — Tableau de bord",$("
 
 function renderStorefront(){
   const q=($("#storeSearch")?.value||"").toLowerCase(),cat=$("#storeCategory")?.value||"";
-  if(isVisitor()&&navigator.onLine&&(!db.products||!db.products.some(p=>p.shopId==="main"&&Number(p.stock)>0&&p.visibleToVisitors!==false))){
-    clearTimeout(window.__publicRetry);
-    window.__publicRetry=setTimeout(()=>refreshPublicCatalog(),250);
-  }
   const items=db.products.filter(p=>p.shopId==="main"&&Number(p.stock)>0&&p.visibleToVisitors!==false&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
   $("#storeGrid").innerHTML=items.map(p=>`<div class="storeitem">
-    ${p.photo?`<img src="${p.photo}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
+    ${p.photo?`<img src="${esc(p.photo)}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
     <h3>${esc(p.name)}</h3><div class="tiny">${esc(p.category)} · stock ${p.stock}</div>
     <div class="price">${fmt(p.sell)} <span class="tiny">/ ${fmt(usdToCdf(p.sell),"CDF")}</span></div>
     <p class="muted">${esc(p.details||"")}</p>
@@ -1779,7 +1779,7 @@ window.removeVisitorCart=id=>{visitorCart=visitorCart.filter(i=>i.productId!==id
 function renderVisitorCart(){
   const details=visitorCart.map(i=>{const p=db.products.find(x=>x.id===i.productId);return p?`${p.name} × ${i.qty}`:""}).filter(Boolean);
   const total=visitorCart.reduce((a,i)=>{const p=db.products.find(x=>x.id===i.productId);return a+(p?p.sell*i.qty:0)},0);
-  $("#visitorCartSummary").innerHTML=details.length?`${details.join(" · ")}<br><b>${fmt(total)} / ${fmt(usdToCdf(total),"CDF")}</b>`:"Panier vide";
+  $("#visitorCartSummary").innerHTML=details.length?`${details.map(esc).join(" · ")}<br><b>${fmt(total)} / ${fmt(usdToCdf(total),"CDF")}</b>`:"Panier vide";
   $("#openOrderBtn").disabled=!visitorCart.length
 }
 $("#storeSearch").oninput=renderStorefront;$("#storeCategory").onchange=renderStorefront;
@@ -1820,8 +1820,8 @@ function renderVisitorChat(){
     $("#visitorMessageInput").disabled=true;$("#visitorSendBtn").disabled=true;return
   }
   selectedOrderId=o.id;
-  $("#visitorOrderInfo").innerHTML=`<b>${o.code}</b> · WhatsApp ${esc(o.whatsapp)}<br>${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br><b>Total : ${fmt(orderTotalUsd(o))} / ${fmt(orderTotalCdf(o),"CDF")}</b>`;
-  $("#visitorChatTitle").textContent=`Commande ${o.code}`;$("#visitorChatAgent").textContent=o.claimedByName?`Agent : ${o.claimedByName}`:"En attente d’un agent…";$("#visitorChatStatus").textContent=orderStatusLabel(o.status);
+  $("#visitorOrderInfo").innerHTML=`<b>${esc(o.code)}</b> · WhatsApp ${esc(o.whatsapp)}<br>${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br><b>Total : ${fmt(orderTotalUsd(o))} / ${fmt(orderTotalCdf(o),"CDF")}</b>`;
+  $("#visitorChatTitle").textContent=`Commande ${esc(o.code)}`;$("#visitorChatAgent").textContent=o.claimedByName?`Agent : ${o.claimedByName}`:"En attente d’un agent…";$("#visitorChatStatus").textContent=orderStatusLabel(o.status);
   $("#visitorMessages").innerHTML=(o.messages||[]).map(m=>`<div class="bubble ${m.senderType==="visitor"?"mine":""}"><b>${esc(m.senderName)}</b><div>${esc(m.text)}</div><small>${displayDate(m.at)}</small></div>`).join("");
   $("#visitorMessageInput").disabled=o.status==="completed"||o.status==="cancelled";$("#visitorSendBtn").disabled=$("#visitorMessageInput").disabled;
   setTimeout(()=>{$("#visitorMessages").scrollTop=$("#visitorMessages").scrollHeight},0)
@@ -1858,7 +1858,7 @@ function renderOrders(){
   const arr=visibleOrdersForAgent();
   $("#ordersAllBtn").style.display=isTrueAdmin()?"":"none";
   $("#ordersList").innerHTML=arr.map(o=>`<div class="ordercard ${selectedOrderId===o.id?"active":""}" onclick="selectOrder('${o.id}')">
-    <div class="row" style="justify-content:space-between"><b>${o.code}</b><span class="orderstatus">${orderStatusLabel(o.status)}</span></div>
+    <div class="row" style="justify-content:space-between"><b>${esc(o.code)}</b><span class="orderstatus">${orderStatusLabel(o.status)}</span></div>
     <div>${esc(o.visitorName||"Visiteur")} · ${esc(o.whatsapp)}</div><div class="tiny">${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(", ")}</div>
     <div class="tiny">${o.claimedByName?`Pris par ${esc(o.claimedByName)}`:"Non attribuée"} · ${displayDate(o.updatedAt)}</div>
   </div>`).join("")||`<div class="ordercard muted">Aucune commande dans cette vue.</div>`;
@@ -1872,7 +1872,7 @@ function selectedOrder(){const o=db.orders.find(x=>x.id===selectedOrderId);retur
 function renderAgentChat(){
   const o=selectedOrder();
   if(!o){$("#agentChatTitle").textContent="Sélectionnez une commande";$("#agentChatMeta").textContent="";$("#agentChatStatus").textContent="—";$("#agentMessages").innerHTML=`<div class="muted">Aucune commande sélectionnée.</div>`;$("#claimOrderBtn").style.display="none";$("#finalizeOrderBtn").style.display="none";$("#agentMessageInput").disabled=true;$("#agentSendBtn").disabled=true;return}
-  $("#agentChatTitle").textContent=`${o.code} · ${o.visitorName||"Visiteur"}`;$("#agentChatMeta").textContent=`WhatsApp ${o.whatsapp} · ${o.items.map(i=>`${i.name} × ${i.qty}`).join(", ")}`;
+  $("#agentChatTitle").textContent=`${esc(o.code)} · ${o.visitorName||"Visiteur"}`;$("#agentChatMeta").textContent=`WhatsApp ${o.whatsapp} · ${o.items.map(i=>`${i.name} × ${i.qty}`).join(", ")}`;
   $("#agentChatStatus").textContent=orderStatusLabel(o.status);
   const u=activeUser(),claimedByMe=o.claimedById===u?.id;
   $("#claimOrderBtn").style.display=o.status==="waiting"?"":"none";
@@ -1906,22 +1906,22 @@ $("#agentMessageInput").addEventListener("keydown",e=>{if(e.key==="Enter")$("#ag
 $("#finalizeOrderBtn").onclick=()=>{
   const o=selectedOrder();if(!o)return;
   const usd=orderTotalUsd(o);$("#orderFinalCurrency").value="USD";$("#orderFinalPayment").value="Espèces";$("#orderFinalPaymentRef").value="";$("#orderFinalPaid").value=usd.toFixed(2);
-  $("#orderFinalizePreview").innerHTML=`Commande <b>${o.code}</b> · ${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br>Total : <b>${fmt(usd)} / ${fmt(usdToCdf(usd),"CDF")}</b>`;openModal("finalizeOrderModal")
+  $("#orderFinalizePreview").innerHTML=`Commande <b>${esc(o.code)}</b> · ${o.items.map(i=>`${esc(i.name)} × ${i.qty}`).join(" · ")}<br>Total : <b>${fmt(usd)} / ${fmt(usdToCdf(usd),"CDF")}</b>`;openModal("finalizeOrderModal")
 };
 $("#orderFinalCurrency").onchange=()=>{const o=selectedOrder();if(!o)return;$("#orderFinalPaid").value=$("#orderFinalCurrency").value==="USD"?orderTotalUsd(o).toFixed(2):Math.round(orderTotalCdf(o))};
 $("#confirmFinalizeOrderBtn").onclick=()=>{
   const o=selectedOrder(),u=activeUser();if(!o)return;
   if(!isTrueAdmin()&&o.claimedById!==u.id)return alert("Cette commande ne vous est pas attribuée.");
   for(const i of o.items){const p=db.products.find(x=>x.id===i.productId);if(!p||p.stock<i.qty)return alert(`Stock insuffisant pour ${i.name}.`)}
-  o.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);p.stock-=i.qty});
   const cur=$("#orderFinalCurrency").value,paid=Number($("#orderFinalPaid").value),payment=$("#orderFinalPayment").value,pref=$("#orderFinalPaymentRef").value.trim();
-  if(!paid)return alert("Indiquez le montant payé.");
+  if(!Number.isFinite(paid)||paid<=0)return alert("Indiquez le montant payé.");
+  o.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);p.stock-=i.qty});
   const s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:"main",
     buyerName:o.visitorName,buyerPhone:o.whatsapp,sellerId:u.id,sellerName:u.name,currency:cur,paymentMethod:payment,paymentRef:pref,rateUsed:db.rate,paidTotal:paid,
     usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:o.items.map(i=>({productId:i.productId,name:i.name,qty:i.qty,buy:i.buy,sell:i.sell})),sourceOrderId:o.id};
   db.sales.push(s);o.status="completed";o.completedAt=new Date().toISOString();o.updatedAt=new Date().toISOString();o.saleId=s.id;
-  o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:`Commande finalisée. Reçu ${s.receipt}. Merci pour votre confiance.`,at:new Date().toISOString()});
-  currentReceiptSaleId=s.id;queueSync("order.finalize",{orderId:o.id,saleId:s.id});notify("Commande finalisée",`${o.code} finalisée par ${u.name}.`);save();closeModals();render();showReceipt(s.id)
+  o.messages.push({id:uid("msg"),senderType:u.role==="admin"?"admin":"agent",senderId:u.id,senderName:u.name,text:`Commande finalisée. Reçu ${esc(s.receipt)}. Merci pour votre confiance.`,at:new Date().toISOString()});
+  currentReceiptSaleId=s.id;queueSync("order.finalize",{orderId:o.id,saleId:s.id});notify("Commande finalisée",`${esc(o.code)} finalisée par ${u.name}.`);save();closeModals();render();showReceipt(s.id)
 };
 
 
@@ -1947,7 +1947,7 @@ function renderAds(){
     return
   }
   if(adIndex>=active.length)adIndex=0;
-  stage.innerHTML=active.map((a,i)=>`<div class="adSlide ${i===adIndex?"active":""}"><img src="${a.image}" alt="Publicité">${a.text?`<div class="adCaption">${esc(a.text)}</div>`:""}</div>`).join("");
+  stage.innerHTML=active.map((a,i)=>`<div class="adSlide ${i===adIndex?"active":""}"><img src="${esc(a.image)}" alt="Publicité">${a.text?`<div class="adCaption">${esc(a.text)}</div>`:""}</div>`).join("");
   dots.innerHTML=active.map((_,i)=>`<span class="adDot ${i===adIndex?"active":""}"></span>`).join("");
   if(active.length>1){
     adTimer=setInterval(()=>{
@@ -1961,7 +1961,7 @@ function renderAds(){
 function renderAdAdmin(){
   const box=$("#adAdminList");
   if(!box)return;
-  box.innerHTML=(db.ads||[]).map(a=>`<div class="adAdminCard">${a.image?`<img src="${a.image}" alt="Publicité">`:""}<p>${esc(a.text||"Sans texte")}</p><div class="row"><button class="btn alt small" onclick="toggleAd('${a.id}')">${a.active===false?"Activer":"Masquer"}</button><button class="btn danger small" onclick="deleteAd('${a.id}')">Supprimer</button></div></div>`).join("")||'<div class="muted">Aucune publicité.</div>'
+  box.innerHTML=(db.ads||[]).map(a=>`<div class="adAdminCard">${a.image?`<img src="${esc(a.image)}" alt="Publicité">`:""}<p>${esc(a.text||"Sans texte")}</p><div class="row"><button class="btn alt small" onclick="toggleAd('${a.id}')">${a.active===false?"Activer":"Masquer"}</button><button class="btn danger small" onclick="deleteAd('${a.id}')">Supprimer</button></div></div>`).join("")||'<div class="muted">Aucune publicité.</div>'
 }
 if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
@@ -1971,7 +1971,7 @@ if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   const btn=$("#addAdBtn");const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
   try{
     let image=await compressImageFile(f,1400,.78);
-    if(navigator.onLine)image=await uploadImageToFirebaseIfNeeded(image,"ads");
+    if(navigator.onLine)image=await uploadMediaIfNeeded(image,"ads");
     const ad={id:uid("ad"),image,text:$("#adTextInput").value.trim(),active:true,createdAt:new Date().toISOString()};
     db.ads.push(ad);
     $("#adImageInput").value="";$("#adTextInput").value="";
@@ -1999,18 +1999,21 @@ window.deleteAd=id=>{
 if("serviceWorker" in navigator){
   window.addEventListener("load",async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js");
+      const reg=await navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service worker:",e)}
   });
 }
 try{
-  render();
+  scrubLegacySecrets();saveSession();
+  persistBusinessState();
   routeFromHash();
+  render();
+  startRemotePolling();
   if(navigator.onLine)setTimeout(async()=>{
     if(isVisitor()){
       await refreshPublicCatalog();
-      render();go("storefront",false)
+      render()
     }else{
       const pending=(db.syncQueue||[]).some(x=>x.status==="pending");
       if(pending)await syncPending({silent:true});

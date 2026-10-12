@@ -6,20 +6,19 @@ export default async function handler(req,res){
   try{
     initFirebase();
     const db=admin.firestore();
-    const snap=await db.collection("mmedpren").doc("global").get();
+    await db.collection("mmedpren").doc("global").get();
     return res.status(200).json({
       ok:true,
       provider:"firebase",
       firestore:true,
-      exists:snap.exists,
-      revision:snap.exists?Number(snap.data()?.revision||0):0
     });
   }catch(error){
-    console.error("HEALTH_CHECK_ERROR",error);
+    console.error("HEALTH_CHECK_ERROR",{code:error?.code});
     return res.status(500).json({
       ok:false,
       provider:"firebase",
-      error:error?.message||"Erreur Firebase"
+      firestore:false,
+      error:"Service Firebase indisponible"
     });
   }
 }

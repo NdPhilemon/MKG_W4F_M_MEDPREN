@@ -2,7 +2,12 @@ FIREBASE_PROJECT_ID=votre-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@votre-project-id.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
 FIREBASE_STORAGE_BUCKET=votre-project-id.firebasestorage.app
-ADMIN_EMAIL=ndagonywaphilemon@gmail.com
-ADMIN_PASSWORD=202020
+ADMIN_EMAIL=adresse-administrateur-a-configurer
+ADMIN_PASSWORD=mot-de-passe-long-unique-a-configurer
+SESSION_SECRET=secret-aleatoire-independant-au-moins-32-caracteres
+
+Variables serveur uniquement. Ne jamais placer de secrets dans index.html.
+SESSION_SECRET est obligatoire et doit rester stable entre les déploiements.
+Sa rotation invalide les anciens jetons : reconnecter les utilisateurs.
 
 Après validation Firebase: supprimer MONGODB_URI et les anciennes variables Supabase.

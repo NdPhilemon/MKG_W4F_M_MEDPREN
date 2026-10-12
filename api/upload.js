@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 import { initFirebase } from "./firebase-init.js";
+import { authenticate } from "./sync.js";
 
 const GLOBAL_CACHE_KEY = "__mmedprenFirebaseBucketName";
 
@@ -162,6 +163,9 @@ export default async function handler(req, res) {
         : req.body || {};
 
     const dataUrl = body.dataUrl;
+    const identity = await authenticate(req.headers["x-sync-token"]);
+    const allowed = identity.role === "admin" || (body.folder !== "ads" && identity.user.permissions?.includes("products.edit"));
+    if (!allowed) return res.status(403).json({ok:false,error:"Upload non autorisé"});
 
     const requestedFolder =
       String(body.folder || "products")
@@ -182,7 +186,7 @@ export default async function handler(req, res) {
     }
 
     const match = dataUrl.match(
-      /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/
+      /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/
     );
 
     if (!match) {
@@ -208,12 +212,12 @@ export default async function handler(req, res) {
 
     if (
       buffer.length >
-      4 * 1024 * 1024
+      3 * 1024 * 1024
     ) {
       return res.status(413).json({
         ok: false,
         error:
-          "Image trop volumineuse (maximum 4 Mo)"
+          "Image trop volumineuse (maximum 3 Mo)"
       });
     }
 
@@ -277,11 +281,10 @@ export default async function handler(req, res) {
       }
     );
 
-    return res.status(500).json({
+    return res.status(error.status || 500).json({
       ok: false,
       error:
-        error?.message ||
-        "La photo n'a pas pu être enregistrée dans Firebase Storage."
+        error.status ? error.message : "La photo n'a pas pu être enregistrée dans Firebase Storage."
     });
   }
 }

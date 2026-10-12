@@ -1,28 +1,10 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 import {initFirebase} from "./firebase-init.js";
-initFirebase();
-const db=admin.firestore(),ROOT=db.collection("mmedpren").doc("global"),ORDERS=db.collection("mmedpren_orders");
-const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"ndagonywaphilemon@gmail.com").toLowerCase(),ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||"202020";
-
-const SESSION_SECRET=process.env.SESSION_SECRET||ADMIN_PASSWORD;
-function b64url(input){return Buffer.from(input).toString("base64url")}
-function signSession(user,role){
-  const payload=b64url(JSON.stringify({sub:user.id,email:user.email||"",role,exp:Date.now()+30*24*60*60*1000}));
-  const sig=crypto.createHmac("sha256",SESSION_SECRET).update(payload).digest("base64url");
-  return `${payload}.${sig}`
-}
-function verifySessionToken(token){
-  try{
-    const [payload,sig]=String(token||"").split(".");if(!payload||!sig)return null;
-    const expected=crypto.createHmac("sha256",SESSION_SECRET).update(payload).digest("base64url");
-    const a=Buffer.from(sig),b=Buffer.from(expected);if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return null;
-    const data=JSON.parse(Buffer.from(payload,"base64url").toString("utf8"));
-    if(!data?.sub||!data?.exp||Date.now()>Number(data.exp))return null;
-    return data
-  }catch(e){return null}
-}
-
+import {signSession,verifySessionToken,sameSecret} from "../lib/session.js";
+import "../sync-core.js";
+const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"").trim().toLowerCase();
+function refs(){initFirebase();const db=admin.firestore();return {db,ROOT:db.collection("mmedpren").doc("global"),ORDERS:db.collection("mmedpren_orders")}}
 const arr=v=>Array.isArray(v)?v:[];
 function send(res,s,p){res.status(s);res.setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(p))}
 function cleanUser(u){if(!u)return null;const {password,...r}=u;return r}
@@ -30,7 +12,7 @@ function primaryAdmin(){
   return {
     id:"u-admin",
     name:"Administrateur principal",
-    email:ADMIN_EMAIL,
+    email:"",
     role:"admin",
     shops:["main"],
     permissions:["*"],
@@ -49,7 +31,7 @@ function defaults(){
     mainCurrency:"USD",
     hideMoney:true,
     shopSettings:{phone:"0974112163",rccm:"CD/BKV/RCCM/24-A-01446",receiptLocation:"ISP, Bukavu/Sud-Kivu",correctionWindowMin:10},
-    adminProfile:{name:"Administrateur principal",email:ADMIN_EMAIL,phone:""},
+    adminProfile:{name:"Administrateur principal",email:"",phone:""},
     shops:[mainShop()],
     users:[primaryAdmin()],
     products:[],
@@ -65,6 +47,7 @@ function normalizeRoot(raw={}){
   if(!r.shops.some(s=>s?.id==="main"))r.shops.unshift(mainShop());
 
   r.users=arr(r.users);
+  r.users=r.users.map(u=>u.suspendedUntil&&new Date(u.suspendedUntil)<=new Date()?{...u,status:'Actif',suspendedUntil:null}:u);
   let adminUser=r.users.find(u=>u?.isPrimary)||r.users.find(u=>String(u?.email||"").toLowerCase()===ADMIN_EMAIL);
   if(!adminUser){
     r.users.unshift(primaryAdmin())
@@ -79,105 +62,205 @@ function normalizeRoot(raw={}){
   return r
 }
 async function readRoot(){
-  const s=await ROOT.get();
-  if(!s.exists){
-    const d=defaults();
-    await ROOT.set(d);
-    return d
-  }
-  const before=s.data()||{};
-  const normalized=normalizeRoot(before);
-  const needsRepair=
-    !Array.isArray(before.shops)||!before.shops.some(x=>x?.id==="main")||
-    !Array.isArray(before.users)||!before.users.some(x=>x?.isPrimary||String(x?.email||"").toLowerCase()===ADMIN_EMAIL);
-  if(needsRepair){
-    await ROOT.set({
-      shops:normalized.shops,
-      users:normalized.users,
-      adminProfile:normalized.adminProfile,
-      updatedAt:new Date().toISOString()
-    },{merge:true})
-  }
-  return normalized
+  const {db,ROOT}=refs();
+  return db.runTransaction(async t=>{const s=await t.get(ROOT);if(s.exists)return normalizeRoot(s.data());const d=defaults();t.set(ROOT,d);return d});
 }
-async function allOrders(){const s=await ORDERS.get();return s.docs.map(d=>d.data().payload).filter(Boolean)}
-async function visitorOrders(id){if(!id)return[];const s=await ORDERS.where("visitorSessionId","==",id).get();return s.docs.map(d=>d.data().payload).filter(Boolean)}
-async function upsertOrders(os){const v=arr(os).filter(o=>o?.id);if(!v.length)return;const b=db.batch();for(const o of v)b.set(ORDERS.doc(o.id),{visitorSessionId:o.visitorSessionId||null,status:o.status||"waiting",claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt||new Date().toISOString(),payload:o},{merge:true});await b.commit()}
-async function bump(){return db.runTransaction(async t=>{const s=await t.get(ROOT),n=(s.exists?Number(s.data().revision||0):0)+1;t.set(ROOT,{revision:n,updatedAt:new Date().toISOString()},{merge:true});return n})}
-async function auth(a){
-  const root=await readRoot(),users=arr(root.users);
-  const tokenData=verifySessionToken(a?.token);
-  if(tokenData){
-    if(tokenData.role==="admin"){
-      const stored=users.find(u=>u.id===tokenData.sub)||users.find(u=>u.isPrimary)||primaryAdmin();
-      return {role:"admin",user:{...stored,role:"admin",isPrimary:true,permissions:["*"]},root}
+const error=(status,message,code)=>Object.assign(new Error(message),{status,code});
+const can=(a,p)=>a.role==='admin'||arr(a.user.permissions).includes('*')||arr(a.user.permissions).includes(p);
+const inShop=(a,id)=>a.role==='admin'||arr(a.user.shops).includes(id);
+function identity(root,id){
+  const user=arr(root.users).find(u=>u.id===id);
+  if(!user||!['admin','manager','seller'].includes(user.role)||
+    (user.status==='Suspendu'&&(!user.suspendedUntil||new Date(user.suspendedUntil)>new Date())))throw error(401,'Compte indisponible','ACCOUNT_INVALID');
+  return {user,role:user.role,root};
+}
+export async function authenticate(token){return identity(await readRoot(),verifySessionToken(token).sub)}
+async function login(body,req){
+  if(!ADMIN_EMAIL||!process.env.ADMIN_PASSWORD)throw error(503,'Configuration administrateur manquante');
+  const {db}=refs(),email=String(body.email||'').trim().toLowerCase();
+  // Durable throttling: shared by all serverless instances, without storing credentials.
+  const id=crypto.createHash('sha256').update(`${email}|${req.headers['x-forwarded-for']||'unknown'}`).digest('hex');
+  const ref=db.collection('mmedpren_auth_limits').doc(id);
+  await db.runTransaction(async t=>{const snap=await t.get(ref),old=snap.data()||{},now=Date.now();
+    const count=now-Number(old.start||0)<900000?Number(old.count||0):0;
+    if(count>=10)throw error(429,'Trop de tentatives. Réessayez dans 15 minutes.');
+    t.set(ref,{start:count?old.start:now,count:count+1});
+  });
+  const root=await readRoot();let user;
+  if(body.type==='admin'&&email===ADMIN_EMAIL&&sameSecret(body.secret,process.env.ADMIN_PASSWORD))user=root.users.find(u=>u.isPrimary);
+  else if(body.type==='staff')user=root.users.find(u=>!u.isPrimary&&String(u.email||'').toLowerCase()===email&&sameSecret(body.secret,u.accessCode));
+  if(!user)throw error(401,'Identifiants incorrects','INVALID_CREDENTIALS');
+  const a=identity(root,user.id),token=signSession(a.user);
+  await ref.delete();return {user:cleanUser(a.user),token,...await stateFor(a)};
+}
+function publicProduct(p){const {buy,buyCurrency,...safe}=p;return safe}
+function publicOrder(o){return {...o,items:arr(o.items).map(({buy,...item})=>item)}}
+async function stateFor(a,sid){
+  const r=a?.root||await readRoot(),{ORDERS}=refs();
+  const rows=a?await ORDERS.get():sid?await ORDERS.where('visitorSessionId','==',sid).get():{docs:[]};
+  const orders=rows.docs.map(d=>d.data().payload).filter(Boolean);
+  if(!a)return {revision:r.revision,state:{rate:r.rate,mainCurrency:r.mainCurrency,shopSettings:r.shopSettings,shops:r.shops,
+    products:arr(r.products).filter(p=>p.visibleToVisitors!==false&&Number(p.stock)>0).map(publicProduct),
+    ads:arr(r.ads).filter(x=>x.active!==false),orders:orders.map(publicOrder)}};
+  return {revision:r.revision,state:{rate:r.rate,mainCurrency:r.mainCurrency,hideMoney:r.hideMoney,shopSettings:r.shopSettings,
+    adminProfile:a.role==='admin'?r.adminProfile:{},shops:r.shops.filter(s=>inShop(a,s.id)),
+    users:a.role==='admin'?r.users.map(cleanUser):[{...cleanUser(a.user),accessCode:null}],
+    products:arr(r.products).filter(p=>inShop(a,p.shopId)),ads:arr(r.ads),
+    sales:arr(r.sales).filter(s=>inShop(a,s.shopId)&&(can(a,'sales.all')||s.sellerId===a.user.id)),
+    orders:orders.filter(o=>inShop(a,o.shopId)&&(a.role==='admin'||(o.status==='waiting'&&can(a,'orders.waiting'))||(o.claimedById===a.user.id&&can(a,'orders.own')))),
+    notifications:a.role==='admin'?arr(r.notifications):[]}};
+}
+function validateMedia(value){
+  if(typeof value==='string'&&/^data:/i.test(value))throw error(400,'Envoyez les images via /api/upload avant la synchronisation');
+  if(value&&typeof value==='object')Object.values(value).forEach(validateMedia);
+}
+function validateChanges(changes,a,current){
+  const stock=new Map();
+  for(const c of changes.filter(c=>c.key==='sales')){
+    const old=arr(current.sales).find(x=>x.id===c.id),next=c.after;
+    if(next&&(!Number.isFinite(next.paidTotal)||next.paidTotal<=0||!['USD','CDF'].includes(next.currency)||!arr(next.items).length))throw error(400,'Vente invalide');
+    if(next)for(const item of next.items){
+      if(!arr(current.products).some(p=>p.id===item.productId&&inShop(a,p.shopId)))throw error(400,'Article de vente invalide');
+      if(!Number.isFinite(item.buy)||item.buy<0||!Number.isFinite(item.sell)||item.sell<0)throw error(400,'Prix invalide');
     }
-    const stored=users.find(u=>u.id===tokenData.sub);
-    if(!stored||stored.status==="Suspendu"||(stored.suspendedUntil&&new Date(stored.suspendedUntil)>new Date()))return null;
-    return {role:stored.role||"seller",user:stored,root}
+    if(!can(a,'sales.create')||!inShop(a,(next||old)?.shopId))throw error(403,'Vente non autorisée');
+    if(a.role!=='admin'){
+      if((old&&old.sellerId!==a.user.id&&!can(a,'sales.all'))||(!old&&next?.sellerId!==a.user.id))throw error(403,'Vente non autorisée');
+      if(old&&a.role==='seller'&&Date.now()-new Date(old.createdAt)>Number(current.shopSettings.correctionWindowMin)*60000){
+        const onlyRequest=next&&Object.keys({...old,...next}).every(k=>k==='pendingRequest'||JSON.stringify(old[k])===JSON.stringify(next[k]));
+        if(!onlyRequest)throw error(403,'Approbation administrateur requise');
+      }
+      if(!next)throw error(403,'Suppression réservée à un administrateur');
+    }
+    for(const [sale,sign] of [[old,1],[next,-1]])if(sale&&sale.status!=='Annulée')for(const item of arr(sale.items)){
+      if(!Number.isFinite(item.qty)||item.qty<=0)throw error(400,'Quantité invalide');
+      stock.set(item.productId,(stock.get(item.productId)||0)+sign*item.qty);
+    }
   }
-  if(!a?.email||!a?.secret)return null;
-  const email=String(a.email).toLowerCase();
-  if(a.type==="admin"&&email===ADMIN_EMAIL&&String(a.secret)===String(ADMIN_PASSWORD)){
-    const stored=users.find(u=>String(u.email||"").toLowerCase()===email)||users.find(u=>u.isPrimary)||primaryAdmin();
-    return {role:"admin",user:{...stored,role:"admin",isPrimary:true,permissions:["*"]},root}
+  for(const c of changes){
+    if(MkgSync.lists.includes(c.key)&&!safeId(c.id))throw error(400,'Identifiant invalide');
+    if(c.after?.id&&c.after.id!==c.id)throw error(400,'Identifiant incohérent');
+    if(c.key==='orders')continue;
+    if(c.key==='users'){
+      const primary=arr(current.users).find(u=>u.isPrimary);
+      if(primary?.id===c.id&&(!c.after||c.after.role!=='admin'||!c.after.isPrimary))throw error(403,'Compte principal protégé');
+      if(c.after?.isPrimary&&c.id!==primary?.id)throw error(403,'Compte principal unique');
+    }
+    if(c.key==='products'){
+      const old=arr(current.products).find(p=>p.id===c.id),next=c.after;
+      if(next&&(!Number.isFinite(next.stock)||next.stock<0||!Number.isFinite(next.buy)||next.buy<0||!Number.isFinite(next.sell)||next.sell<0))throw error(400,'Stock ou prix invalide');
+      if(!inShop(a,(old||next)?.shopId)||(next&&!inShop(a,next.shopId)))throw error(403,'Boutique non autorisée');
+      if(!can(a,'products.edit')){
+        if(!old||!next||Object.keys({...old,...next}).some(k=>k!=='stock'&&JSON.stringify(old[k])!==JSON.stringify(next[k])))throw error(403,'Article non autorisé');
+        if(Number(next.stock)-Number(c.before?.stock)!==(stock.get(c.id)||0))throw error(403,'Stock sans vente correspondante');
+      }
+      continue;
+    }
+    if(a.role!=='admin'&&!['sales','notifications'].includes(c.key))throw error(403,'Action réservée à un administrateur');
   }
-  const user=users.find(u=>String(u.email||"").toLowerCase()===email&&String(u.accessCode||"")===String(a.secret));
-  if(!user||user.status==="Suspendu"||(user.suspendedUntil&&new Date(user.suspendedUntil)>new Date()))return null;
-  return {role:user.role||"seller",user,root}
+  if(!can(a,'products.edit'))for(const [id,delta] of stock){
+    const c=changes.find(c=>c.key==='products'&&c.id===id);
+    if(delta&&(!c||Number(c.after.stock)-Number(c.before?.stock)!==delta))throw error(400,'Stock et ventes incohérents');
+  }
 }
-async function privateState(a){
-  const r=normalizeRoot(a.root||await readRoot());
-  const adminUsers=arr(r.users);
-  if(a.role==="admin"&&!adminUsers.some(u=>u.id===a.user.id)){
-    adminUsers.unshift(a.user)
-  }
-  return {
-    rate:Number(r.rate||2400),
-    mainCurrency:r.mainCurrency||"USD",
-    hideMoney:!!r.hideMoney,
-    shopSettings:r.shopSettings||{},
-    adminProfile:r.adminProfile||{},
-    shops:arr(r.shops),
-    users:a.role==="admin"?adminUsers.map(cleanUser):[cleanUser(a.user)],
-    products:arr(r.products),
-    ads:arr(r.ads),
-    sales:arr(r.sales),
-    orders:await allOrders(),
-    notifications:arr(r.notifications)
+const safeId=id=>typeof id==='string'&&/^[\w-]{1,150}$/.test(id);
+function orderRow(o){return {visitorSessionId:o.visitorSessionId,status:o.status,claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt,payload:o}}
+async function syncPrivate(body,token){
+  const sub=verifySessionToken(token).sub,{db,ROOT,ORDERS}=refs();
+  if(!safeId(body.requestId))throw error(400,'Identifiant de requête requis');
+  const receipt=db.collection('mmedpren_sync_receipts').doc(`${sub}-${body.requestId}`);
+  await db.runTransaction(async t=>{
+    const [rootSnap,done]=await Promise.all([t.get(ROOT),t.get(receipt)]);
+    const current=normalizeRoot(rootSnap.data()),a=identity(current,sub);
+    if(done.exists)return;
+    let changes=body.changes;
+    if(!Array.isArray(changes)){
+      if(Number(body.baseRevision)!==Number(current.revision))throw error(409,'Ancienne file locale : réconciliation nécessaire avant envoi','SYNC_CONFLICT');
+      changes=MkgSync.diff({...current,orders:[]},body.state||{}).filter(c=>c.key!=='orders');
+    }
+    if(changes.length>150)throw error(413,'Trop de modifications dans un seul envoi');
+    validateMedia(changes);validateChanges(changes,a,current);
+    const orderChanges=changes.filter(c=>c.key==='orders');
+    const orderDocs=[];
+    for(const c of orderChanges){if(!safeId(c.id))throw error(400,'Commande invalide');orderDocs.push(await t.get(ORDERS.doc(c.id)))}
+    const next=MkgSync.merge(current,changes.filter(c=>c.key!=='orders'));
+    // Strip legacy passwords even when the old document still contains them.
+    next.users=arr(next.users).map(cleanUser);
+    for(let i=0;i<orderChanges.length;i++){
+      const c=orderChanges[i],old=orderDocs[i].data()?.payload;
+      if(!old||!c.after)throw error(403,'Création/suppression de commande interdite');
+      if(!inShop(a,old.shopId)||(a.role!=='admin'&&(old.claimedById!==sub||!can(a,'orders.own'))))throw error(403,'Commande attribuée à un autre agent');
+      for(const key of ['visitorSessionId','claimedById','claimedByName','claimedAt','items','shopId'])if(JSON.stringify(c.after[key])!==JSON.stringify(old[key]))throw error(409,'Commande modifiée à distance');
+      if(c.after.status!==old.status&&!(old.status==='claimed'&&c.after.status==='completed'))throw error(403,'Transition de commande interdite');
+      const merged=MkgSync.merge({orders:[old]},[c]).orders[0];
+      if(merged.status==='completed'&&!arr(next.sales).some(s=>s.id===merged.saleId&&s.sourceOrderId===merged.id))throw error(400,'Vente de commande manquante');
+      t.set(ORDERS.doc(c.id),orderRow(merged));
+    }
+    next.revision=Number(current.revision||0)+1;next.updatedAt=new Date().toISOString();
+    t.set(ROOT,next);t.set(receipt,{createdAt:new Date(),revision:next.revision});
+  });
+  return stateFor(await authenticate(token));
+}
+async function syncPublic(body){
+  const sid=body.visitorSessionId,{db,ROOT,ORDERS}=refs();
+  if(!safeId(sid)||!Array.isArray(body.orders)||body.orders.length>50)throw error(400,'Session ou commandes invalides');
+  await db.runTransaction(async t=>{
+    const rootSnap=await t.get(ROOT),root=normalizeRoot(rootSnap.data()),writes=[];
+    for(const incoming of body.orders){
+      if(!safeId(incoming.id))throw error(400,'Commande invalide');
+      const ref=ORDERS.doc(incoming.id),snap=await t.get(ref),old=snap.data()?.payload;
+      if(old&&old.visitorSessionId!==sid)throw error(403,'Commande non autorisée');
+      let o=old;
+      if(!o){
+        const items=arr(incoming.items).map(i=>{const p=root.products.find(p=>p.id===i.productId&&p.visibleToVisitors!==false&&p.shopId==='main');
+          if(!p||!Number.isInteger(i.qty)||i.qty<1||i.qty>p.stock)throw error(400,'Article indisponible');
+          return {productId:p.id,name:p.name,qty:i.qty,sell:p.sell,buy:p.buy};});
+        if(!items.length)throw error(400,'Commande vide');
+        o={id:incoming.id,code:`CMD-${incoming.id.slice(-8).toUpperCase()}`,visitorSessionId:sid,visitorName:String(incoming.visitorName||'').slice(0,120),whatsapp:String(incoming.whatsapp||'').slice(0,40),shopId:'main',items,status:'waiting',claimedById:null,claimedByName:null,createdAt:new Date().toISOString(),messages:[]};
+      }
+      const messages=new Map(arr(o.messages).map(m=>[m.id,m]));
+      if(!['completed','cancelled'].includes(o.status))for(const m of arr(incoming.messages))if(safeId(m.id)&&!messages.has(m.id))messages.set(m.id,{id:m.id,senderType:'visitor',senderId:sid,senderName:o.visitorName||'Visiteur',text:String(m.text||'').slice(0,4000),at:new Date().toISOString()});
+      const merged={...o,messages:[...messages.values()]};
+      if(!old||JSON.stringify(old.messages)!==JSON.stringify(merged.messages)){merged.updatedAt=new Date().toISOString();writes.push([ref,merged])}
+    }
+    for(const [ref,o] of writes)t.set(ref,orderRow(o));
+    if(writes.length)t.set(ROOT,{...root,revision:Number(root.revision||0)+1,updatedAt:new Date().toISOString()});
+  });return stateFor(null,sid);
+}
+async function claimOrder(body,token){
+  const sub=verifySessionToken(token).sub,{db,ROOT,ORDERS}=refs();
+  if(!safeId(body.orderId))throw error(400,'Commande invalide');
+  return db.runTransaction(async t=>{
+    const rootSnap=await t.get(ROOT),orderSnap=await t.get(ORDERS.doc(body.orderId));
+    const root=normalizeRoot(rootSnap.data()),a=identity(root,sub),old=orderSnap.data()?.payload;
+    if(!old||!inShop(a,old.shopId)||!can(a,'orders.waiting'))throw error(403,'Commande non autorisée');
+    if(old.status!=='waiting'||old.claimedById)throw error(409,'Commande déjà récupérée');
+    const now=new Date().toISOString(),order={...old,status:'claimed',claimedById:sub,claimedByName:a.user.name,claimedAt:now,updatedAt:now,
+      messages:[...arr(old.messages),{id:`msg-${crypto.randomUUID()}`,senderType:a.role==='admin'?'admin':'agent',senderId:sub,senderName:a.user.name,text:'Bonjour, je vais vous assister pour finaliser votre commande.',at:now}]};
+    const revision=Number(root.revision||0)+1;t.set(ORDERS.doc(order.id),orderRow(order));t.set(ROOT,{...root,revision,updatedAt:now});
+    return {order,revision};
+  });
+}
+export default async function handler(req,res){
+  try{
+    let result;
+    if(req.method==='GET'){
+      const scope=req.query?.scope||'public';
+      if(scope==='revision'){const root=await readRoot();result={revision:root.revision}}
+      else if(scope==='public')result=await stateFor(null,String(req.query?.visitorSessionId||''));
+      else result=await stateFor(await authenticate(req.headers['x-sync-token']));
+    }else if(req.method==='POST'){
+      const body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};
+      if(body.action==='auth')result=await login(body,req);
+      else if(body.action==='syncPublic')result=await syncPublic(body);
+      else if(body.action==='sync')result=await syncPrivate(body,body.auth?.token);
+      else if(body.action==='claimOrder')result=await claimOrder(body,body.auth?.token);
+      else throw error(400,'Action inconnue');
+    }else throw error(405,'Méthode non autorisée');
+    return send(res,200,{ok:true,provider:'firebase',...result});
+  }catch(e){
+    const status=e instanceof SyntaxError?400:e.status||500;
+    console.error('FIREBASE_SYNC_API',{status,code:e.code||'SERVER_ERROR'});
+    return send(res,status,{ok:false,provider:'firebase',code:e.code||'SERVER_ERROR',error:status>=500?'Service temporairement indisponible':e.message});
   }
 }
-async function publicState(sid){const r=await readRoot();return {rate:Number(r.rate||2400),mainCurrency:r.mainCurrency||"USD",shopSettings:r.shopSettings||{},shops:arr(r.shops),products:arr(r.products).filter(p=>p&&p.visibleToVisitors!==false&&Number(p.stock||0)>0),ads:arr(r.ads).filter(a=>a?.active!==false),orders:await visitorOrders(sid)}}
-function deletes(state,ops){let users=arr(state.users),products=arr(state.products),ads=arr(state.ads),sales=arr(state.sales);for(const op of arr(ops)){const p=op?.payload||{};if(op.type==="product.delete"&&p.productId)products=products.filter(x=>x.id!==p.productId);if(op.type==="ad.delete"&&p.adId)ads=ads.filter(x=>x.id!==p.adId);if(op.type==="staff.delete"&&p.userId)users=users.filter(x=>x.id!==p.userId||x.isPrimary);if(op.type==="report.reset"&&Array.isArray(p.saleIds)){const ids=new Set(p.saleIds);sales=sales.filter(x=>!ids.has(x.id))}}return{users,products,ads,sales}}
-async function writeAdmin(s,ops){
-  const x=deletes(s,ops);
-  let users=x.users.map(u=>{const{password,...r}=u;return r});
-  if(!users.some(u=>u?.isPrimary||String(u?.email||"").toLowerCase()===ADMIN_EMAIL)){
-    users.unshift(primaryAdmin())
-  }
-  let shops=arr(s.shops);
-  if(!shops.some(sh=>sh?.id==="main"))shops.unshift(mainShop());
-
-  await ROOT.set({
-    rate:Number(s.rate||2400),
-    mainCurrency:s.mainCurrency||"USD",
-    hideMoney:!!s.hideMoney,
-    shopSettings:s.shopSettings||{},
-    adminProfile:s.adminProfile||{},
-    shops,
-    users,
-    products:x.products,
-    ads:x.ads,
-    sales:x.sales,
-    notifications:arr(s.notifications),
-    updatedAt:new Date().toISOString()
-  },{merge:true});
-  await upsertOrders(s.orders)
-}
-async function writeStaff(s,a){const r=await readRoot(),sm=new Map(arr(r.sales).map(x=>[x.id,x]));for(const x of arr(s.sales))if(x?.id)sm.set(x.id,x);const pm=new Map(arr(r.products).map(x=>[x.id,x])),can=a.role==="manager"&&arr(a.user.permissions).includes("products.edit");for(const x of arr(s.products)){if(!x?.id)continue;const cur=pm.get(x.id);if(can)pm.set(x.id,x);else if(cur)pm.set(x.id,{...cur,stock:Number(x.stock||0)})}await ROOT.set({sales:[...sm.values()],products:[...pm.values()],updatedAt:new Date().toISOString()},{merge:true});await upsertOrders(s.orders)}
-async function syncPublic(body){const sid=String(body.visitorSessionId||"");if(!sid)throw Object.assign(new Error("Session visiteur manquante"),{status:400});for(const o of arr(body.orders).filter(o=>o?.id&&o.visitorSessionId===sid)){const ref=ORDERS.doc(o.id);await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists){t.set(ref,{visitorSessionId:sid,status:o.status||"waiting",claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt||new Date().toISOString(),payload:o});return}const row=s.data(),server=row.payload||{},mm=new Map([...arr(server.messages),...arr(o.messages)].filter(Boolean).map(m=>[m.id,m])),adv=["claimed","completed","cancelled"].includes(row.status||server.status),merged={...o,...(adv?{status:row.status||server.status,claimedById:row.claimedById||server.claimedById,claimedByName:row.claimedByName||server.claimedByName,claimedAt:server.claimedAt,completedAt:server.completedAt,saleId:server.saleId}:{}),visitorSessionId:sid,messages:[...mm.values()],updatedAt:new Date().toISOString()};t.set(ref,{visitorSessionId:sid,status:merged.status||"waiting",claimedById:merged.claimedById||null,claimedByName:merged.claimedByName||null,updatedAt:merged.updatedAt,payload:merged},{merge:true})})}const revision=await bump();return{revision,state:await publicState(sid)}}
-export default async function handler(req,res){try{if(req.method==="GET"){const scope=String(req.query.scope||"public");if(scope==="revision"){const r=await readRoot();return send(res,200,{ok:true,provider:"firebase",revision:Number(r.revision||0),updatedAt:r.updatedAt||null})}if(scope==="public"){const r=await readRoot();return send(res,200,{ok:true,provider:"firebase",revision:Number(r.revision||0),state:await publicState(String(req.query.visitorSessionId||""))})}const a=await auth({token:req.headers["x-sync-token"],email:req.headers["x-sync-email"],secret:req.headers["x-sync-secret"],type:req.headers["x-sync-type"]});if(!a)return send(res,401,{ok:false,error:"Authentification requise"});return send(res,200,{ok:true,provider:"firebase",revision:Number(a.root.revision||0),state:await privateState(a)})}if(req.method!=="POST")return send(res,405,{ok:false,error:"Méthode non autorisée"});const body=typeof req.body==="string"?JSON.parse(req.body||"{}"):req.body||{};if(body.action==="auth"){
-  const a=await auth({email:body.email,secret:body.secret,type:body.type});
-  if(!a)return send(res,401,{ok:false,error:"Identifiants incorrects"});
-  return send(res,200,{ok:true,provider:"firebase",user:cleanUser(a.user),token:signSession(a.user,a.role)})
-}if(body.action==="syncPublic"){const r=await syncPublic(body);return send(res,200,{ok:true,provider:"firebase",...r})}const a=await auth(body.auth);if(!a)return send(res,401,{ok:false,error:"Session non autorisée"});if(body.action==="claimOrder"){const ref=ORDERS.doc(String(body.orderId||""));let claimed=null;await db.runTransaction(async t=>{const s=await t.get(ref);if(!s.exists)return;const row=s.data();if((row.status||row.payload?.status)!=="waiting"||row.claimedById)return;const now=new Date().toISOString(),old=row.payload||{},msg={id:`msg-${crypto.randomUUID()}`,senderType:a.role==="admin"?"admin":"agent",senderId:a.user.id,senderName:a.user.name,text:"Bonjour, j’ai récupéré votre commande et je vais vous assister pour la finaliser.",at:now};claimed={...old,status:"claimed",claimedById:a.user.id,claimedByName:a.user.name,claimedAt:now,updatedAt:now,messages:[...arr(old.messages),msg]};t.set(ref,{status:"claimed",claimedById:a.user.id,claimedByName:a.user.name,updatedAt:now,payload:claimed},{merge:true})});if(!claimed)return send(res,409,{ok:false,error:"Commande déjà récupérée"});const revision=await bump();return send(res,200,{ok:true,provider:"firebase",revision,order:claimed})}if(body.action==="sync"){if(a.role==="admin")await writeAdmin(body.state||{},body.operations||[]);else await writeStaff(body.state||{},a);const revision=await bump(),refreshed=await auth(body.auth);return send(res,200,{ok:true,provider:"firebase",revision,state:await privateState(refreshed)})}return send(res,400,{ok:false,error:"Action inconnue"})}catch(e){console.error("FIREBASE_SYNC_API",e);return send(res,e.status||500,{ok:false,provider:"firebase",error:e?.message||"Erreur serveur Firebase"})}}
