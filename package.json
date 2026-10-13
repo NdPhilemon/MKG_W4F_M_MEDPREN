@@ -3,7 +3,9 @@
   "version": "32.0.0",
   "private": true,
   "type": "module",
+  "engines": {"node": "24.x"},
   "scripts": {
+    "build": "node scripts/check-build.mjs",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

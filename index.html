@@ -790,20 +790,25 @@ function privateHeaders(){
 }
 async function uploadMediaIfNeeded(dataUrl,folder="products"){
   if(!dataUrl||typeof dataUrl!=="string"||!dataUrl.startsWith("data:image/"))return dataUrl;
-  const r=await fetch("/api/upload",{method:"POST",headers:{"Content-Type":"application/json",...privateHeaders()},body:JSON.stringify({dataUrl,folder})});
-  const j=await r.json().catch(()=>({ok:false,error:`HTTP ${r.status}`}));
-  if(!r.ok||!j.ok||!j.url)throw new Error(j.error||"Upload image Firebase impossible");
-  return j.url
+  if(isVisitor()||(folder==="ads"?!isTrueAdmin():!hasPermission("products.edit")))throw new Error("Envoi d’image non autorisé.");
+  if(mediaBytes(dataUrl)>3*1024*1024)throw Object.assign(new Error("Image trop volumineuse : choisissez une image plus petite."),{status:413});
+  const epoch=sessionEpoch;
+  const j=await apiJson("/api/upload",{method:"POST",signal:AbortSignal.timeout(35000),headers:privateHeaders(),body:JSON.stringify({dataUrl,folder})});
+  if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi de l’image.");
+  let url;try{url=new URL(j.url)}catch{}
+  if(!j.ok||url?.protocol!=="https:"||url.hostname!=="res.cloudinary.com")throw new Error("Le stockage n’a pas confirmé une URL Cloudinary valide.");
+  return url.href
 }
 async function normalizeMediaBeforeSync(){
-  let changed=false;
-  for(const p of (db.products||[])){
-    if(p?.photo?.startsWith?.("data:image/")){p.photo=await uploadMediaIfNeeded(p.photo,"products");changed=true}
+  for(const [rows,field,folder] of [[db.products,"photo","products"],[db.ads,"image","ads"]]){
+    for(const item of rows||[]){
+      const pending=item?.[field];
+      if(!pending?.startsWith?.("data:image/"))continue;
+      const url=await uploadMediaIfNeeded(pending,folder);
+      // A newer local image must not be replaced by an older upload response.
+      if(item[field]===pending){item[field]=url;persistBusinessState()}
+    }
   }
-  for(const a of (db.ads||[])){
-    if(a?.image?.startsWith?.("data:image/")){a.image=await uploadMediaIfNeeded(a.image,"ads");changed=true}
-  }
-  if(changed)persistBusinessState()
 }
 async function apiJson(url,options={}){
   const r=await fetch(url,{signal:AbortSignal.timeout(20000),cache:"no-store",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
@@ -899,14 +904,31 @@ function uid(p="id"){return p+"-"+crypto.randomUUID()}
 
 async function compressImageFile(file,maxSide=1200,quality=.78){
   if(!file)return "";
-  const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)});
-  return await new Promise(resolve=>{
-    const img=new Image();img.onload=()=>{
-      let w=img.width,h=img.height;const scale=Math.min(1,maxSide/Math.max(w,h));w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
-      const c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);resolve(c.toDataURL("image/jpeg",quality))
-    };img.onerror=()=>resolve(data);img.src=data
-  })
+  if(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type))throw new Error("Choisissez une image JPEG, PNG, WebP ou GIF.");
+  if(file.size>25*1024*1024)throw new Error("Photo source trop volumineuse (maximum 25 Mio). Réduisez sa taille.");
+  const source=URL.createObjectURL(file);
+  try{return await new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onerror=()=>reject(new Error("Cette image ne peut pas être décodée. Exportez-la en JPEG ou PNG."));
+    img.onload=()=>{try{
+      if(!img.width||!img.height||img.width*img.height>50000000)throw new Error("Dimensions de photo trop grandes ou invalides.");
+      const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
+      let w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+      const canvas=document.createElement("canvas"),ctx=canvas.getContext("2d");
+      if(!ctx)throw new Error("Compression indisponible dans ce navigateur.");
+      for(let attempt=0;attempt<8;attempt++){
+        canvas.width=w;canvas.height=h;ctx.drawImage(img,0,0,w,h);
+        const data=canvas.toDataURL("image/jpeg",quality);
+        if(!data.startsWith("data:image/jpeg;base64,"))throw new Error("Compression JPEG impossible.");
+        if(mediaBytes(data)<=1024*1024)return resolve(data);
+        quality=Math.max(.5,quality-.08);w=Math.max(1,Math.round(w*.8));h=Math.max(1,Math.round(h*.8));
+      }
+      reject(new Error("L’image reste trop volumineuse après compression. Choisissez une image plus petite."));
+    }catch(e){reject(e)}};
+    img.src=source;
+  })}finally{URL.revokeObjectURL(source)}
 }
+function mediaBytes(dataUrl){const encoded=String(dataUrl).split(",")[1]||"";return Math.floor(encoded.length*3/4)-(encoded.endsWith("==")?2:encoded.endsWith("=")?1:0)}
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
 function fmt(v,c="USD"){return c==="USD"?"$"+Number(v||0).toFixed(2):Math.round(Number(v||0)).toLocaleString("fr-FR")+" FC"}
@@ -1382,6 +1404,10 @@ $("#productSell").oninput=updateProductProfitPreview;
 $("#productBuyCurrency").onchange=updateProductProfitPreview;
 $("#productSellCurrency").onchange=updateProductProfitPreview;
 $("#saveProductBtn").onclick=async()=>{
+  if(!hasPermission("products.edit"))return alert("Accès non autorisé.");
+  const btn=$("#saveProductBtn");if(btn.disabled)return;
+  const epoch=sessionEpoch,productId=editingProductId;
+  const shopId=$("#productShop").value,category=$("#productCategory").value,details=$("#productDetails").value.trim();
   const name=$("#productName").value.trim();
   const stock=Math.max(0,Number($("#productStock").value)||0);
   const buyInput=Number($("#productBuy").value)||0;
@@ -1392,48 +1418,49 @@ $("#saveProductBtn").onclick=async()=>{
   const sell=productPriceToUsd(sellInput,sellCurrency);
   const visibleToVisitors=$("#productVisibility").value==="public";
   if(!name||sell<=0)return alert("Nom et prix de vente requis.");
-
+  const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
+  try{
   const f=$("#productPhoto").files[0];
   let photo=null;
   if(f){
     if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
     photo=await compressImageFile(f);
-    if(navigator.onLine){
-      try{photo=await uploadMediaIfNeeded(photo,"products")}
-      catch(e){return alert(`La photo n’a pas pu être enregistrée : ${e.message}`)}
-    }
+    if(navigator.onLine)photo=await uploadMediaIfNeeded(photo,"products");
   }
-
-  if(editingProductId){
-    const p=db.products.find(x=>x.id===editingProductId);
+  if(epoch!==sessionEpoch||productId!==editingProductId)throw new Error("La session ou l’article ouvert a changé pendant l’envoi.");
+  if(productId){
+    const p=db.products.find(x=>x.id===productId);
     if(!p)return alert("Article introuvable.");
-    p.shopId=$("#productShop").value;
-    p.name=name;p.category=$("#productCategory").value;p.stock=stock;
+    p.shopId=shopId;
+    p.name=name;p.category=category;p.stock=stock;
     p.buy=buy;p.sell=sell;p.buyCurrency=buyCurrency;p.sellCurrency=sellCurrency;
     p.buyOriginal=buyInput;p.sellOriginal=sellInput;p.rateAtCreation=db.rate;
-    p.details=$("#productDetails").value.trim();
+    p.details=details;
     p.visibleToVisitors=visibleToVisitors;
     if(photo!==null)p.photo=photo;
     queueSync("product.update",{productId:p.id});
-    notify("Article modifié",`${name} a été mis à jour.`);
+    notify("Article enregistré localement",`${name} modifié ; synchronisation en attente.`);
   }else{
     const p={
-      id:uid("p"),shopId:$("#productShop").value,name,
-      category:$("#productCategory").value,stock,buy,sell,
+      id:uid("p"),shopId,name,
+      category,stock,buy,sell,
       buyCurrency,sellCurrency,buyOriginal:buyInput,sellOriginal:sellInput,
-      rateAtCreation:db.rate,details:$("#productDetails").value.trim(),
+      rateAtCreation:db.rate,details,
       photo:photo||"",visibleToVisitors
     };
     db.products.push(p);
     queueSync("product.create",{productId:p.id,name,shopId:p.shopId});
-    notify("Article ajouté",`${name} ajouté et ${visibleToVisitors?"visible aux visiteurs":"retiré du public"}.`);
+    notify("Article enregistré localement",`${name} ajouté ; synchronisation en attente.`);
   }
 
   save();
-  if(navigator.onLine)await syncPending({silent:true});
+  if(navigator.onLine&&!await syncPending({silent:true}))alert("L’article reste enregistré sur cet appareil. Sa publication attend la synchronisation.");
+  if(epoch!==sessionEpoch)return;
   editingProductId=null;
   closeModals();
   render();
+  }catch(e){alert(`L’article n’a pas pu être publié : ${e.message}`)}
+  finally{btn.disabled=false;btn.textContent=oldText}
 };
 
 window.editProduct=id=>{
@@ -1968,11 +1995,14 @@ if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   const f=$("#adImageInput").files[0];
   if(!f)return alert("Choisissez une image publicitaire.");
   if(!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
-  const btn=$("#addAdBtn");const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
+  const btn=$("#addAdBtn");if(btn.disabled)return;
+  const epoch=sessionEpoch,text=$("#adTextInput").value.trim();
+  const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
   try{
     let image=await compressImageFile(f,1400,.78);
     if(navigator.onLine)image=await uploadMediaIfNeeded(image,"ads");
-    const ad={id:uid("ad"),image,text:$("#adTextInput").value.trim(),active:true,createdAt:new Date().toISOString()};
+    if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi.");
+    const ad={id:uid("ad"),image,text,active:true,createdAt:new Date().toISOString()};
     db.ads.push(ad);
     $("#adImageInput").value="";$("#adTextInput").value="";
     queueSync("ad.create",{adId:ad.id});save();renderAds();renderAdAdmin();

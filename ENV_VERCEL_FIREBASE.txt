@@ -1,13 +1,21 @@
 FIREBASE_PROJECT_ID=votre-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@votre-project-id.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
-FIREBASE_STORAGE_BUCKET=votre-project-id.firebasestorage.app
-ADMIN_EMAIL=adresse-administrateur-a-configurer
-ADMIN_PASSWORD=mot-de-passe-long-unique-a-configurer
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+ADMIN_EMAIL=abrahamfaith325@gmail.com
+ADMIN_PASSWORD=
 SESSION_SECRET=secret-aleatoire-independant-au-moins-32-caracteres
 
 Variables serveur uniquement. Ne jamais placer de secrets dans index.html.
 SESSION_SECRET est obligatoire et doit rester stable entre les déploiements.
 Sa rotation invalide les anciens jetons : reconnecter les utilisateurs.
+
+Les trois variables CLOUDINARY sont requises pour les nouveaux uploads.
+Firebase Storage n’est plus utilisé par l’application. Ne supprimez pas les
+anciennes images : leurs URL existantes restent utilisées et compatibles.
+Production : valeurs de production. Preview/Development : valeurs de test séparées.
+Guide détaillé et retour arrière : DEPLOIEMENT_CLOUDINARY.md.
 
 Après validation Firebase: supprimer MONGODB_URI et les anciennes variables Supabase.

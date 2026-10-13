@@ -9,7 +9,6 @@ export function initFirebase(){
   if(privateKey.startsWith('"')&&privateKey.endsWith('"'))privateKey=privateKey.slice(1,-1);
   privateKey=privateKey.replace(/\\n/g,'\n').replace(/\r\n/g,'\n');
   return admin.initializeApp({
-    credential:admin.credential.cert({projectId,clientEmail,privateKey}),
-    storageBucket:process.env.FIREBASE_STORAGE_BUCKET||undefined
+    credential:admin.credential.cert({projectId,clientEmail,privateKey})
   });
 }

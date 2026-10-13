@@ -1,4 +1,4 @@
-const CACHE="mmedpren-v33";
+const CACHE="mmedpren-v34-cloudinary";
 const CORE=["./index.html","./sync-core.js","./logo.png","./manifest.webmanifest"];
 self.addEventListener("install",event=>{
   event.waitUntil((async()=>{

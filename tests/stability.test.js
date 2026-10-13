@@ -9,6 +9,9 @@ import {JSDOM} from 'jsdom';
 process.env.ADMIN_EMAIL='owner@example.test';
 process.env.ADMIN_PASSWORD='test-only-password';
 process.env.SESSION_SECRET='test-only-signing-key-at-least-32-characters';
+process.env.CLOUDINARY_CLOUD_NAME='test-cloud';
+process.env.CLOUDINARY_API_KEY='test-api-key';
+process.env.CLOUDINARY_API_SECRET='test-api-secret';
 admin.initializeApp({projectId:'test-only'});
 const clone=v=>v===undefined?undefined:structuredClone(v);
 const documents=new Map();let transactionTail=Promise.resolve();
@@ -29,10 +32,10 @@ const {default:upload}=await import('../api/upload.js');
 const {signSession}=await import('../lib/session.js');
 async function request(url='/api/sync',options={}){
   const parsed=new URL(url,'https://app.test'),req={method:options.method||'GET',headers:options.headers||{},query:Object.fromEntries(parsed.searchParams),body:options.body};
-  let status=200,data;
-  const res={setHeader(){},status(s){status=s;return this},end(value){data=JSON.parse(value)},json(value){data=value;return this}};
+  let status=200,data;const headers={};
+  const res={setHeader(key,value){headers[String(key).toLowerCase()]=String(value)},status(s){status=s;return this},end(value){data=JSON.parse(value)},json(value){data=value;return this}};
   await (parsed.pathname==='/api/health'?health:parsed.pathname==='/api/upload'?upload:handler)(req,res);
-  return {ok:status>=200&&status<300,status,json:async()=>data,data};
+  return {ok:status>=200&&status<300,status,headers,json:async()=>data,data};
 }
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const script=html.match(/<script>\s*([\s\S]*?)<\/script>/)[1];
@@ -54,6 +57,18 @@ function browser(storage={},hash='home'){
 }
 function root(){return documents.get('mmedpren/global')}
 function product(id='p-one'){return {id,name:'Article',category:'Divers',shopId:'main',stock:10,buy:2,sell:5,photo:'',visibleToVisitors:true}}
+const jpegData='data:image/jpeg;base64,/9j/AA==';
+function mockCloudinary(status=200){
+  const previous=globalThis.fetch;
+  globalThis.fetch=async(url,options)=>{
+    assert.match(String(url),/^https:\/\/api\.cloudinary\.com\/v1_1\/test-cloud\/image\/upload$/);
+    if(status!==200)return new Response(JSON.stringify({error:{message:'simulated'}}),{status,headers:{'content-type':'application/json'}});
+    const publicId=options.body.get('public_id');
+    assert.ok(options.body.get('signature'));assert.equal(options.body.get('api_key'),'test-api-key');
+    return Response.json({secure_url:`https://res.cloudinary.com/test-cloud/image/upload/v1/${publicId}.jpg`,public_id:publicId,width:20,height:10,bytes:4});
+  };
+  return ()=>globalThis.fetch=previous;
+}
 
 test('Admin login, refresh, reopened tab, routes, remote session injection and logout',async()=>{
   documents.clear();const a=browser({},'products');assert.equal(a.read('isVisitor()'),true);
@@ -208,16 +223,106 @@ test('public order chat and finalization preserve ownership and decrement stock 
 });
 
 test('service worker update, API bypass, offline fallback and old cache cleanup',async()=>{
-  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['unrelated-cache',new Map()]]);
+  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['unrelated-cache',new Map()]]);
   const key=v=>typeof v==='string'?v:v.url;
   const caches={async keys(){return [...stores.keys()]},async delete(k){return stores.delete(k)},async open(k){if(!stores.has(k))stores.set(k,new Map());const store=stores.get(k);return {async addAll(){},async put(k,v){store.set(key(k),v)},async match(k){return store.get(key(k))}}}};
   let network='new deployment',claimed=false,skipped=false;
   const context={URL,Request:class {constructor(url,options){this.url=url;this.options=options}},Response,caches,fetch:async()=>{if(network===null)throw new Error('offline');return new Response(network)},self:{location:{origin:'https://app.test',href:'https://app.test/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>skipped=true,clients:{claim:async()=>claimed=true}}};
   vm.runInNewContext(fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
   let work;handlers.install({waitUntil:p=>work=p});await work;assert.equal(skipped,true);
-  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));
+  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));
   const fetchEvent=async(path,mode='navigate')=>{let result;handlers.fetch({request:{url:'https://app.test'+path,method:'GET',mode},respondWith:p=>result=p});return result};
   assert.equal(await (await fetchEvent('/')).text(),'new deployment');network=null;
   assert.equal(await (await fetchEvent('/index.html')).text(),'new deployment');
   await assert.rejects(fetchEvent('/api/sync','cors'),/offline/);
+});
+
+test('Cloudinary: authenticated Admin upload returns an optimized HTTPS URL',async()=>{
+  documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
+  try{
+    const result=await request('/api/upload',{method:'POST',headers:{'x-sync-token':owner.read('db.syncAuth.token')},body:JSON.stringify({folder:'products',dataUrl:jpegData})});
+    assert.equal(result.status,200);assert.equal(result.data.provider,'cloudinary');
+    assert.match(result.data.url,/^https:\/\/res\.cloudinary\.com\/test-cloud\/image\/upload\/f_auto,q_auto\//);
+    assert.match(result.data.publicId,/^mmedpren\/development\/products\/[a-f0-9]{64}$/);
+  }finally{restore()}
+});
+
+test('Cloudinary: anonymous and unauthorized advertising uploads are rejected',async()=>{
+  documents.clear();const owner=browser();await owner.login();
+  const anonymous=await request('/api/upload',{method:'POST',body:JSON.stringify({folder:'products',dataUrl:jpegData})});
+  assert.equal(anonymous.status,401);
+  root().users.push({id:'seller-media',name:'Seller',email:'media@example.test',accessCode:'123456',role:'seller',shops:['main'],permissions:['products.edit'],status:'Actif'});
+  const staff=browser();await staff.login('staff','media@example.test','123456');
+  const forbidden=await request('/api/upload',{method:'POST',headers:{'x-sync-token':staff.read('db.syncAuth.token')},body:JSON.stringify({folder:'ads',dataUrl:jpegData})});
+  assert.equal(forbidden.status,403);assert.equal(forbidden.data.code,'UPLOAD_FORBIDDEN');
+});
+
+test('Cloudinary: product URL reaches Firestore, visitor, refresh and second device',async()=>{
+  documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
+  try{
+    const url=await owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"products")`);
+    owner.read(`db.products.push({...${JSON.stringify(product())},photo:${JSON.stringify(url)}});queueSync("product.create");save()`);
+    await owner.read('syncPending({silent:true})');assert.equal(root().products[0].photo,url);
+    const refreshed=browser(owner.storage(),'products');assert.equal(refreshed.read('currentRole()'),'admin');assert.equal(refreshed.read('db.products[0].photo'),url);
+    const visitor=browser();await visitor.read('pullRemote({silent:true})');assert.equal(visitor.read('db.products[0].photo'),url);
+  }finally{restore()}
+});
+
+test('Cloudinary: active advertisement URL is synchronized and visible to visitors',async()=>{
+  documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
+  try{
+    const url=await owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"ads")`);
+    owner.read(`db.ads.push({id:"ad-cloud",image:${JSON.stringify(url)},text:"Promo",active:true});queueSync("ad.create");save()`);
+    await owner.read('syncPending({silent:true})');
+    const visitor=browser();await visitor.read('pullRemote({silent:true})');assert.equal(visitor.read('db.ads[0].image'),url);
+    assert.match(visitor.w.document.querySelector('#adStage img').src,/res\.cloudinary\.com/);
+  }finally{restore()}
+});
+
+test('Cloudinary: provider failures never create fake URLs or destroy the Admin session',async()=>{
+  for(const [providerStatus,expected] of [[401,502],[403,502],[413,413],[429,429],[500,502]]){
+    documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary(providerStatus);
+    try{
+      await assert.rejects(owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"products")`));
+      assert.equal(owner.read('currentRole()'),'admin');assert.equal(owner.read('db.products.length'),0);
+      const response=await request('/api/upload',{method:'POST',headers:{'x-sync-token':owner.read('db.syncAuth.token')},body:JSON.stringify({folder:'products',dataUrl:jpegData})});
+      assert.equal(response.status,expected);
+    }finally{restore()}
+  }
+});
+
+test('Cloudinary: missing configuration and invalid or oversized images fail safely',async()=>{
+  documents.clear();const owner=browser();await owner.login();const token=owner.read('db.syncAuth.token');
+  const secret=process.env.CLOUDINARY_API_SECRET;delete process.env.CLOUDINARY_API_SECRET;
+  try{
+    const missing=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({folder:'products',dataUrl:jpegData})});
+    assert.equal(missing.status,503);assert.equal(missing.data.code,'MEDIA_NOT_CONFIGURED');
+  }finally{process.env.CLOUDINARY_API_SECRET=secret}
+  const invalid=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({folder:'products',dataUrl:'data:image/jpeg;base64,YQ=='})});
+  assert.equal(invalid.status,400);assert.equal(invalid.data.code,'INVALID_IMAGE');
+  const tooLarge=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token,'content-length':'4300001'},body:'{}'});
+  assert.equal(tooLarge.status,413);
+});
+
+test('Cloudinary: the durable upload quota rejects abusive requests',async()=>{
+  documents.clear();const owner=browser();await owner.login();const token=owner.read('db.syncAuth.token');
+  const userId=owner.read('db.currentUserId');
+  const userKey=crypto.createHash('sha256').update(userId).digest('hex');
+  documents.set(`mmedpren_upload_limits/user-${userKey}`,{start:Date.now(),count:20});
+  const restore=mockCloudinary();
+  try{
+    const response=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({folder:'products',dataUrl:jpegData})});
+    assert.equal(response.status,429);assert.equal(response.data.code,'UPLOAD_RATE_LIMIT');
+    assert.ok(Number(response.headers['retry-after'])>0);
+  }finally{restore()}
+});
+
+test('Cloudinary: offline Base64 stays local then is replaced before Firestore sync',async()=>{
+  documents.clear();const owner=browser();await owner.login();owner.w.navigator.onLine=false;
+  owner.read(`db.products.push({...${JSON.stringify(product())},photo:${JSON.stringify(jpegData)}});queueSync("product.create");save()`);
+  assert.match(owner.read('db.products[0].photo'),/^data:image/);assert.equal(root().products.length,0);
+  const restore=mockCloudinary();try{
+    owner.w.navigator.onLine=true;owner.w.fetch=request;await owner.read('syncPending({silent:true})');
+    assert.match(root().products[0].photo,/^https:\/\/res\.cloudinary\.com/);assert.doesNotMatch(JSON.stringify(root()),/data:image/);
+  }finally{restore()}
 });

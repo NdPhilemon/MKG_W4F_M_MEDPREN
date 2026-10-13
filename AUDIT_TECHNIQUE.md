@@ -1,6 +1,6 @@
 # Audit et stabilisation — 12 octobre 2026
 
-Cloudinary n’a pas été intégré. Les pages, styles, couleurs, reçus et fonctions de boutique existants sont conservés. Les corrections portent sur la session, la synchronisation, les contrôles serveur et la PWA.
+Ce document conserve le diagnostic de stabilisation initial. L’intégration Cloudinary a ensuite été réalisée le 14 octobre 2026, sans modifier les pages, styles, couleurs, reçus ni fonctions métier. Sa configuration et son ordre de déploiement sont détaillés dans `DEPLOIEMENT_CLOUDINARY.md`.
 
 ## Diagnostic constaté avant correction
 
@@ -33,7 +33,7 @@ Le choix de `localStorage` conserve le fonctionnement PWA hors ligne et la réou
 
 Commande : `npm test` avec Node.js 24. Les tests chargent le HTML et le JavaScript réels dans jsdom. Les handlers réels utilisent un substitut Firestore en mémoire, avec transactions sérialisées, lectures avant écritures et application atomique. Le service worker est exécuté dans un contexte simulant les API Cache/Fetch.
 
-Résultat final : **13 tests réussis, 0 échec**. Contrôles `node --check` réussis sur les quatre fichiers API et les modules ajoutés/service worker ; `git diff --check` sans erreur. La comparaison du HTML/CSS précédant le script applicatif avec la version Git d’origine est identique, hormis le chargement de `sync-core.js`.
+Résultat de la stabilisation initiale : **13 tests réussis, 0 échec**. La campagne finale Cloudinary ajoute les parcours d’upload, de publication multi-appareils, de panne fournisseur, de quota et de reprise hors ligne : **21 tests réussis, 0 échec**. Le contrôle `npm run build` réussit également.
 
 | Scénario demandé | Résultat local |
 |---|---|
@@ -61,16 +61,20 @@ La conservation du mode « Ouvrir comme » après rechargement et le parcours co
 | `api/firebase-init.js` | Singleton de l’application par défaut et normalisation de la clé privée. |
 | `api/health.js` | Réponse simple et absence de détails internes dans les erreurs publiques. |
 | `api/sync.js` | Authentification serveur, transactions, droits, commandes, révisions, fusion, idempotence, limites de tentatives et validation des médias. |
-| `api/upload.js` | Authentification/permission, formats raster autorisés et taille limitée avant stockage. |
-| `sw.js` | Cache v33, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
+| `api/upload.js` | Authentification/permission, quota durable, formats raster autorisés, taille limitée et upload signé vers Cloudinary. |
+| `lib/cloudinary.js` **nouveau** | Validation binaire, signature SHA-256, appel fournisseur, vérification de réponse et URL optimisée. |
+| `sw.js` | Cache v34, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
 | `vercel.json` | Non-cache pour `/` et revalidation du module de fusion. |
 | `sync-core.js` **nouveau** | Diff/fusion partagés entre navigateur et backend, sans logique de session. |
 | `lib/session.js` **nouveau** | Signature, validation et expiration des jetons ; secret indépendant obligatoire. |
 | `package.json` | Commande de tests et dépendance de développement jsdom. |
 | `package-lock.json` **nouveau** | Versions exactes et installation reproductible. |
 | `.gitignore` **nouveau** | Exclusion des dépendances installées, fichiers d’environnement et artefacts Vercel. |
-| `ENV_VERCEL_FIREBASE.txt` | Configuration sans identifiants de secours ; ajout de `SESSION_SECRET`. |
-| `tests/stability.test.js` **nouveau** | Scénarios de régression exécutables. |
+| `ENV_VERCEL_FIREBASE.txt` | Modèle sans secret ; ajout de l’Admin de test et des trois variables Cloudinary. |
+| `firebase.json` et `firebase/storage.rules` | Retrait de la configuration Firebase Storage devenue inactive, sans suppression des anciens médias. |
+| `scripts/check-build.mjs` **nouveau** | Validation reproductible des scripts, imports, JSON et ressources locales avant déploiement. |
+| `tests/stability.test.js` **nouveau** | Scénarios de régression et d’intégration Cloudinary simulée exécutables. |
+| `DEPLOIEMENT_CLOUDINARY.md` **nouveau** | Configuration Cloudinary/Vercel, ordre de mise en production, checklist et rollback. |
 | `AUDIT_TECHNIQUE.md` **nouveau** | Diagnostic, changements, validation et limites. |
 
 Les deux nouveaux modules `sync-core.js` et `lib/session.js` sont indispensables au déploiement : ne pas remplacer seulement `index.html` et `api/sync.js`. Aucun ZIP complet n’est nécessaire. `node_modules` n’est pas à envoyer dans GitHub.
@@ -78,17 +82,17 @@ Les deux nouveaux modules `sync-core.js` et `lib/session.js` sont indispensables
 ## Configuration et points restant à valider
 
 1. **Avant déploiement :** définir `ADMIN_EMAIL`, un nouveau `ADMIN_PASSWORD` long et unique, et `SESSION_SECRET` aléatoire indépendant d’au moins 32 caractères dans Vercel. L’ancien mot de passe était présent dans les sources : il doit être remplacé. Conserver `SESSION_SECRET` entre les déploiements ; sa rotation impose une reconnexion. Une reconnexion initiale est attendue si les anciens jetons utilisaient le mot de passe comme clé de signature.
-2. Vérifier les trois variables du compte de service Firebase et `FIREBASE_STORAGE_BUCKET`. La valeur de la clé privée n’est ni journalisée ni renvoyée au navigateur. `/api/health` doit répondre `{ "ok": true, "provider": "firebase", "firestore": true }`.
+2. Vérifier les trois variables du compte de service Firebase et les trois variables Cloudinary. `FIREBASE_STORAGE_BUCKET` n’est plus requis. Les secrets ne sont ni journalisés ni renvoyés au navigateur. `/api/health` doit répondre `{ "ok": true, "provider": "firebase", "firestore": true }`.
 3. **Anciennes files sans état de référence :** elles ne sont acceptées que si leur révision correspond encore au serveur. En cas de divergence, elles restent locales et nécessitent une réconciliation des données. Aucune ancienne file n’est supprimée automatiquement.
 4. **Conflits sur un même champ :** conservés et signalés, sans choix arbitraire d’une version. Il n’y a pas encore d’écran dédié de résolution de conflit.
 5. Le modèle existant conserve les données métier dans `mmedpren/global`. Sa croissance reste une limite structurelle : une séparation en documents par entité sera nécessaire pour un volume important. Les nouveaux accusés dans `mmedpren_sync_receipts` assurent l’idempotence ; leur rétention devra être administrée sans supprimer les accusés de lots encore susceptibles d’être rejoués. Les compteurs `mmedpren_auth_limits` sont temporisés logiquement, sans tâche automatique de purge.
 6. Les codes d’accès du personnel restent consultables par l’administrateur et stockés côté serveur, conformément à l’interface existante. Ils ne sont pas renvoyés aux autres membres du personnel. Remplacer ce modèle par des codes à usage unique/hachés demanderait un changement de gestion des accès.
 7. Les scripts historiques MongoDB/Firebase et MongoDB/Supabase sont conservés : ce sont des utilitaires manuels, pas des mécanismes de synchronisation actifs. Le script Supabase n’est pas exécutable avec les seules dépendances actuelles de `scripts/package.json`. Les anciens README restent des archives ; le présent rapport décrit le comportement corrigé.
-8. Vérifier en recette les neuf scénarios sur deux appareils réels avant Cloudinary. Aucune modification distante, migration de données ou rotation de secrets n’a été effectuée par cet audit.
+8. Vérifier en recette les scénarios sur deux appareils réels après avoir configuré Cloudinary et redéployé Vercel. Aucune migration ni suppression des anciennes images Firebase Storage n’est requise.
 
-## Branchement Cloudinary ultérieur
+## Intégration Cloudinary réalisée
 
-Remplacer uniquement l’adaptateur de stockage derrière **`api/upload.js`**, en conservant son contrat `{dataUrl, folder}` → `{ok, url}` et ses contrôles d’accès. Le frontend appelle **`uploadMediaIfNeeded()`** et les données métier gardent seulement `product.photo` / `ad.image` comme URL. Les fonctions de vente, stock, reçus et rapports n’ont pas à connaître Cloudinary.
+**`api/upload.js`** conserve son contrat `{dataUrl, folder}` → `{ok, url}` et ses contrôles d’accès. Il appelle désormais un upload Cloudinary signé côté serveur. Le frontend continue d’utiliser **`uploadMediaIfNeeded()`** et les données métier gardent seulement `product.photo` / `ad.image` comme URL. Les fonctions de vente, stock, reçus et rapports restent indépendantes du fournisseur d’images.
 
 ## Références vérifiées
 

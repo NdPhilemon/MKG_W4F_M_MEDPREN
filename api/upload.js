@@ -1,290 +1,50 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
-import { initFirebase } from "./firebase-init.js";
 import { authenticate } from "./sync.js";
+import { cloudinaryConfig, decodeImage, uploadCloudinary, MAX_UPLOAD_BODY_BYTES, mediaError } from "../lib/cloudinary.js";
 
-const GLOBAL_CACHE_KEY = "__mmedprenFirebaseBucketName";
-
-function normalizeBucketName(value) {
-  return String(value || "")
-    .trim()
-    .replace(/^gs:\/\//i, "")
-    .replace(/^https?:\/\/storage\.googleapis\.com\//i, "")
-    .replace(/\/+$/, "");
-}
-
-async function bucketExists(app, name) {
-  if (!name) return null;
-
-  try {
-    const bucket = admin.storage(app).bucket(name);
-    await bucket.getMetadata();
-    return bucket;
-  } catch (error) {
-    const code = Number(
-      error?.code ||
-      error?.response?.statusCode ||
-      0
-    );
-
-    if (code === 404) return null;
-
-    if (code === 401 || code === 403) {
-      return admin.storage(app).bucket(name);
-    }
-
-    return null;
-  }
-}
-
-async function listProjectBuckets(app, projectId) {
-  try {
-    const credential = app.options.credential;
-
-    if (!credential?.getAccessToken) {
-      return [];
-    }
-
-    const tokenResult = await credential.getAccessToken();
-
-    const token =
-      typeof tokenResult === "string"
-        ? tokenResult
-        : tokenResult?.access_token;
-
-    if (!token) return [];
-
-    const response = await fetch(
-      `https://storage.googleapis.com/storage/v1/b?project=${encodeURIComponent(projectId)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      }
-    );
-
-    if (!response.ok) return [];
-
-    const json = await response.json();
-
-    return Array.isArray(json?.items)
-      ? json.items.map(item => item?.name).filter(Boolean)
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-async function resolveBucket(app) {
-  const cached = globalThis[GLOBAL_CACHE_KEY];
-
-  if (cached) {
-    return admin.storage(app).bucket(cached);
-  }
-
-  const projectId =
-    process.env.FIREBASE_PROJECT_ID ||
-    app.options.projectId ||
-    "";
-
-  const configured = normalizeBucketName(
-    process.env.FIREBASE_STORAGE_BUCKET
-  );
-
-  const candidates = [
-    configured,
-    projectId
-      ? `${projectId}.firebasestorage.app`
-      : "",
-    projectId
-      ? `${projectId}.appspot.com`
-      : ""
-  ].filter(Boolean);
-
-  for (const name of [...new Set(candidates)]) {
-    const bucket = await bucketExists(app, name);
-
-    if (bucket) {
-      globalThis[GLOBAL_CACHE_KEY] = bucket.name;
-      return bucket;
-    }
-  }
-
-  const discovered = await listProjectBuckets(
-    app,
-    projectId
-  );
-
-  if (discovered.length) {
-    const preferred =
-      discovered.find(
-        name =>
-          name.endsWith(".firebasestorage.app")
-      ) ||
-      discovered.find(
-        name =>
-          name.endsWith(".appspot.com")
-      ) ||
-      discovered[0];
-
-    const bucket =
-      admin.storage(app).bucket(preferred);
-
-    globalThis[GLOBAL_CACHE_KEY] = preferred;
-
-    return bucket;
-  }
-
-  throw new Error(
-    "Aucun bucket Firebase Storage n'existe pour ce projet. " +
-    "Ouvrez Firebase Console > Storage et terminez la création du bucket."
-  );
-}
-
-export default async function handler(req, res) {
-  res.setHeader(
-    "Cache-Control",
-    "no-store"
-  );
-
-  try {
-    const app = initFirebase();
-
-    if (req.method !== "POST") {
-      return res.status(405).json({
-        ok: false,
-        error: "Méthode non autorisée"
-      });
-    }
-
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body || "{}")
-        : req.body || {};
-
-    const dataUrl = body.dataUrl;
-    const identity = await authenticate(req.headers["x-sync-token"]);
-    const allowed = identity.role === "admin" || (body.folder !== "ads" && identity.user.permissions?.includes("products.edit"));
-    if (!allowed) return res.status(403).json({ok:false,error:"Upload non autorisé"});
-
-    const requestedFolder =
-      String(body.folder || "products")
-        .replace(
-          /[^a-zA-Z0-9_-]/g,
-          ""
-        ) || "products";
-
-    if (
-      !dataUrl ||
-      typeof dataUrl !== "string" ||
-      !dataUrl.startsWith("data:image/")
-    ) {
-      return res.status(400).json({
-        ok: false,
-        error: "Image invalide"
-      });
-    }
-
-    const match = dataUrl.match(
-      /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/
-    );
-
-    if (!match) {
-      return res.status(400).json({
-        ok: false,
-        error: "Format d'image invalide"
-      });
-    }
-
-    const mime = match[1];
-
-    const buffer = Buffer.from(
-      match[2],
-      "base64"
-    );
-
-    if (!buffer.length) {
-      return res.status(400).json({
-        ok: false,
-        error: "Image vide"
-      });
-    }
-
-    if (
-      buffer.length >
-      3 * 1024 * 1024
-    ) {
-      return res.status(413).json({
-        ok: false,
-        error:
-          "Image trop volumineuse (maximum 3 Mo)"
-      });
-    }
-
-    const ext =
-      mime.includes("png")
-        ? "png"
-        : mime.includes("webp")
-        ? "webp"
-        : mime.includes("gif")
-        ? "gif"
-        : "jpg";
-
-    const bucket =
-      await resolveBucket(app);
-
-    const filename =
-      `${requestedFolder}/` +
-      `${Date.now()}-${crypto.randomUUID()}.${ext}`;
-
-    const file =
-      bucket.file(filename);
-
-    const downloadToken =
-      crypto.randomUUID();
-
-    await file.save(buffer, {
-      resumable: false,
-      contentType: mime,
-
-      metadata: {
-        cacheControl:
-          "public,max-age=31536000",
-
-        metadata: {
-          firebaseStorageDownloadTokens:
-            downloadToken
-        }
-      }
+async function reserveUpload(userId) {
+  const db=admin.firestore(),now=Date.now();
+  const userKey=crypto.createHash('sha256').update(userId).digest('hex');
+  const limits=[
+    {ref:db.collection('mmedpren_upload_limits').doc(`user-${userKey}`),duration:600000,max:20},
+    {ref:db.collection('mmedpren_upload_limits').doc('project'),duration:86400000,max:200}
+  ];
+  await db.runTransaction(async transaction=>{
+    const snapshots=await Promise.all(limits.map(limit=>transaction.get(limit.ref)));
+    const rows=limits.map((limit,i)=>{
+      const old=snapshots[i].data()||{},active=now-Number(old.start||0)<limit.duration;
+      const count=active?Number(old.count||0):0;
+      if(count>=limit.max)throw Object.assign(mediaError(429,'UPLOAD_RATE_LIMIT','Trop d’envois d’images. Réessayez plus tard.'),{retryAfter:Math.ceil((Number(old.start)+limit.duration-now)/1000)});
+      return {start:active?old.start:now,count:count+1};
     });
+    limits.forEach((limit,i)=>transaction.set(limit.ref,rows[i]));
+  });
+}
 
-    const url =
-      `https://firebasestorage.googleapis.com/v0/b/` +
-      `${encodeURIComponent(bucket.name)}/o/` +
-      `${encodeURIComponent(filename)}` +
-      `?alt=media&token=${encodeURIComponent(downloadToken)}`;
-
-    return res.status(200).json({
-      ok: true,
-      provider: "firebase",
-      bucket: bucket.name,
-      path: filename,
-      url
-    });
-
-  } catch (error) {
-    console.error(
-      "FIREBASE_STORAGE_UPLOAD",
-      {
-        message: error?.message,
-        code: error?.code
-      }
-    );
-
-    return res.status(error.status || 500).json({
-      ok: false,
-      error:
-        error.status ? error.message : "La photo n'a pas pu être enregistrée dans Firebase Storage."
-    });
+export default async function handler(req,res) {
+  res.setHeader('Cache-Control','no-store');
+  try {
+    if(req.method!=='POST'){res.setHeader('Allow','POST');throw mediaError(405,'METHOD_NOT_ALLOWED','Méthode non autorisée');}
+    const identity=await authenticate(req.headers['x-sync-token']);
+    if(Number(req.headers['content-length']||0)>MAX_UPLOAD_BODY_BYTES)throw mediaError(413,'IMAGE_TOO_LARGE','Image trop volumineuse. Compressez-la avant envoi.');
+    const serialized=typeof req.body==='string'?req.body:JSON.stringify(req.body||{});
+    if(Buffer.byteLength(serialized,'utf8')>MAX_UPLOAD_BODY_BYTES)throw mediaError(413,'IMAGE_TOO_LARGE','Image trop volumineuse. Compressez-la avant envoi.');
+    const body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};
+    if(!body||typeof body!=='object'||Array.isArray(body))throw mediaError(400,'INVALID_BODY','Requête JSON invalide.');
+    const folder=body.folder??'products';
+    if(!['products','ads'].includes(folder))throw mediaError(400,'INVALID_FOLDER','Destination image invalide.');
+    const permissions=identity.user.permissions||[];
+    const allowed=identity.role==='admin'||(folder==='products'&&(permissions.includes('products.edit')||permissions.includes('*')));
+    if(!allowed)throw mediaError(403,'UPLOAD_FORBIDDEN','Vous ne disposez pas de l’autorisation d’envoyer cette image.');
+    const image=decodeImage(body.dataUrl),config=cloudinaryConfig();
+    await reserveUpload(identity.user.id);
+    return res.status(200).json(await uploadCloudinary(image,folder,identity.user.id,config));
+  } catch(e) {
+    const status=e instanceof SyntaxError?400:e.status||500;
+    // Never log request bodies, tokens, environment values or provider response messages.
+    console.error('MEDIA_UPLOAD_ERROR',{status,code:e.code||'UPLOAD_ERROR'});
+    if(status===429)res.setHeader('Retry-After',String(e.retryAfter||60));
+    return res.status(status).json({ok:false,code:e.code||'UPLOAD_ERROR',error:e instanceof SyntaxError?'Requête JSON invalide.':e.status?e.message:'Le service d’images est temporairement indisponible.'});
   }
 }

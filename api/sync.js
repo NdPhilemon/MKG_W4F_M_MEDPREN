@@ -57,7 +57,7 @@ function normalizeRoot(raw={}){
     adminUser.isPrimary=true;
     adminUser.permissions=["*"];
     if(!Array.isArray(adminUser.shops)||!adminUser.shops.length)adminUser.shops=["main"];
-    adminUser.email=adminUser.email||ADMIN_EMAIL
+    adminUser.email=ADMIN_EMAIL||adminUser.email
   }
   return r
 }
@@ -76,7 +76,7 @@ function identity(root,id){
 }
 export async function authenticate(token){return identity(await readRoot(),verifySessionToken(token).sub)}
 async function login(body,req){
-  if(!ADMIN_EMAIL||!process.env.ADMIN_PASSWORD)throw error(503,'Configuration administrateur manquante');
+  if(!ADMIN_EMAIL||!process.env.ADMIN_PASSWORD)throw error(503,'Configuration administrateur manquante dans Vercel','ADMIN_NOT_CONFIGURED');
   const {db}=refs(),email=String(body.email||'').trim().toLowerCase();
   // Durable throttling: shared by all serverless instances, without storing credentials.
   const id=crypto.createHash('sha256').update(`${email}|${req.headers['x-forwarded-for']||'unknown'}`).digest('hex');
@@ -261,6 +261,7 @@ export default async function handler(req,res){
   }catch(e){
     const status=e instanceof SyntaxError?400:e.status||500;
     console.error('FIREBASE_SYNC_API',{status,code:e.code||'SERVER_ERROR'});
-    return send(res,status,{ok:false,provider:'firebase',code:e.code||'SERVER_ERROR',error:status>=500?'Service temporairement indisponible':e.message});
+    const publicError=e.code==='ADMIN_NOT_CONFIGURED'?e.message:status>=500?'Service temporairement indisponible':e.message;
+    return send(res,status,{ok:false,provider:'firebase',code:e.code||'SERVER_ERROR',error:publicError});
   }
 }
