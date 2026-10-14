@@ -63,7 +63,7 @@ La conservation du mode « Ouvrir comme » après rechargement et le parcours co
 | `api/sync.js` | Authentification serveur, transactions, droits, commandes, révisions, fusion, idempotence, limites de tentatives et validation des médias. |
 | `api/upload.js` | Authentification/permission, quota durable, formats raster autorisés, taille limitée et upload signé vers Cloudinary. |
 | `lib/cloudinary.js` **nouveau** | Validation binaire, signature SHA-256, appel fournisseur, vérification de réponse et URL optimisée. |
-| `sw.js` | Cache v35, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
+| `sw.js` | Cache v36, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
 | `vercel.json` | Non-cache pour `/` et revalidation du module de fusion. |
 | `sync-core.js` **nouveau** | Diff/fusion partagés entre navigateur et backend, sans logique de session. |
 | `lib/session.js` **nouveau** | Signature, validation et expiration des jetons ; secret indépendant obligatoire. |

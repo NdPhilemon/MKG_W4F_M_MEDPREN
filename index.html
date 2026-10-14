@@ -369,7 +369,7 @@ body.internal-mode .bottom .nav{min-width:76px}
       <div class="field"><label>Image publicitaire</label><input id="adImageInput" type="file" accept="image/*"></div>
       <div class="field"><label>Texte facultatif</label><input id="adTextInput" placeholder="Promotion, nouveauté, message…"></div>
     </div>
-    <div class="actions"><button id="addAdBtn" class="btn">Ajouter au panneau</button></div>
+    <div class="actions"><button id="addAdBtn" class="btn">Ajouter au panneau</button><button id="cancelAdEditBtn" class="btn alt" style="display:none">Annuler la modification</button></div>
     <div id="adAdminList" class="adAdminGrid"></div>
   </div>
 
@@ -395,7 +395,6 @@ body.internal-mode .bottom .nav{min-width:76px}
     <button class="btn alt" id="visitorAccountBtn">👤 Espace visiteur</button>
   </div>
   <div id="storeGrid" class="storegrid" style="margin-top:16px"></div>
-  <div class="notice" style="margin-top:16px">Les visiteurs voient automatiquement les articles publiés par l’administrateur, leurs prix et le suivi de leurs propres commandes.</div>
   <div id="visitorCartBar" class="cartbar" style="margin-top:16px">
     <div class="row" style="justify-content:space-between">
       <div><b>Panier</b><div id="visitorCartSummary" class="muted">Panier vide</div></div>
@@ -905,7 +904,8 @@ async function checkRemoteRevision(){
     if(rev!==Number(db.serverRevision||0))await pullRemote({silent:true});
   }catch(e){recordSyncFailure(e)}
 }
-function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,2000)}
+const REMOTE_POLL_MS=1000;
+function startRemotePolling(){if(pullTimer)clearInterval(pullTimer);pullTimer=setInterval(checkRemoteRevision,REMOTE_POLL_MS)}
 window.addEventListener("online",()=>{renderNetwork();renderSync();setTimeout(async()=>{const pending=(db.syncQueue||[]).some(x=>x.status==="pending");if(pending)await syncPending({silent:true});await checkRemoteRevision()},150)});
 window.addEventListener("offline",()=>{renderNetwork();renderSync()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)checkRemoteRevision()});
@@ -1971,7 +1971,7 @@ document.addEventListener("click",e=>{
 });
 
 
-let adTimer=null,adIndex=0;
+let adTimer=null,adIndex=0,editingAdId=null;
 function renderAds(){
   const stage=$("#adStage"),dots=$("#adDots");
   if(!stage||!dots)return;
@@ -1997,30 +1997,49 @@ function renderAds(){
 function renderAdAdmin(){
   const box=$("#adAdminList");
   if(!box)return;
-  box.innerHTML=(db.ads||[]).map(a=>`<div class="adAdminCard">${a.image?`<img src="${esc(a.image)}" alt="Publicité">`:""}<p>${esc(a.text||"Sans texte")}</p><div class="row"><button class="btn alt small" onclick="toggleAd('${a.id}')">${a.active===false?"Activer":"Masquer"}</button><button class="btn danger small" onclick="deleteAd('${a.id}')">Supprimer</button></div></div>`).join("")||'<div class="muted">Aucune publicité.</div>'
+  box.innerHTML=(db.ads||[]).map(a=>`<div class="adAdminCard">${a.image?`<img src="${esc(a.image)}" alt="Publicité">`:""}<p>${esc(a.text||"Sans texte")}</p><div class="row"><button class="btn small" onclick="editAd('${a.id}')">Modifier</button><button class="btn alt small" onclick="toggleAd('${a.id}')">${a.active===false?"Activer":"Masquer"}</button><button class="btn danger small" onclick="deleteAd('${a.id}')">Supprimer</button></div></div>`).join("")||'<div class="muted">Aucune publicité.</div>'
 }
+function resetAdEditor(){
+  editingAdId=null;$("#adImageInput").value="";$("#adTextInput").value="";
+  $("#addAdBtn").textContent="Ajouter au panneau";$("#cancelAdEditBtn").style.display="none"
+}
+window.editAd=id=>{
+  if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
+  const ad=db.ads.find(x=>x.id===id);if(!ad)return;
+  editingAdId=id;$("#adImageInput").value="";$("#adTextInput").value=ad.text||"";
+  $("#addAdBtn").textContent="Enregistrer la modification";$("#cancelAdEditBtn").style.display="inline-flex";
+  $("#adTextInput").focus()
+};
+$("#cancelAdEditBtn").onclick=resetAdEditor;
 if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   if(!isTrueAdmin())return alert("Action réservée à l’administrateur.");
   const f=$("#adImageInput").files[0];
-  if(!f)return alert("Choisissez une image publicitaire.");
-  if(!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
+  const editedId=editingAdId,existing=editedId?db.ads.find(x=>x.id===editedId):null;
+  if(editedId&&!existing)return resetAdEditor();
+  if(!existing&&!f)return alert("Choisissez une image publicitaire.");
+  if(f&&!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
   const btn=$("#addAdBtn");if(btn.disabled)return;
   const epoch=sessionEpoch,text=$("#adTextInput").value.trim();
   const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
   try{
-    let image=await compressImageFile(f,1400,.78);
-    image=await uploadMediaIfNeeded(image,"ads");
-    if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi.");
-    const ad={id:uid("ad"),image,text,active:true,createdAt:new Date().toISOString()};
-    db.ads.push(ad);
-    $("#adImageInput").value="";$("#adTextInput").value="";
-    queueSync("ad.create",{adId:ad.id});save();renderAds();renderAdAdmin();
+    let image=existing.image;
+    if(f){image=await compressImageFile(f,1400,.78);image=await uploadMediaIfNeeded(image,"ads")}
+    if(epoch!==sessionEpoch||editedId!==editingAdId)throw new Error("La session ou la publicité a changé pendant l’envoi.");
+    if(existing){
+      existing.image=image;existing.text=text;existing.updatedAt=new Date().toISOString();
+      queueSync("ad.update",{adId:existing.id})
+    }else{
+      const ad={id:uid("ad"),image,text,active:true,createdAt:new Date().toISOString()};
+      db.ads.push(ad);queueSync("ad.create",{adId:ad.id})
+    }
+    save();renderAds();renderAdAdmin();
     if(navigator.onLine){
       const ok=await syncPending({silent:true});
       if(!ok)alert("La publicité reste enregistrée sur cet appareil et sera renvoyée automatiquement dès que la synchronisation réussira.")
     }
+    resetAdEditor();renderAdAdmin();
   }catch(e){alert(`La publicité n’a pas pu être enregistrée : ${e.message}`)}
-  finally{btn.disabled=false;btn.textContent=oldText}
+  finally{btn.disabled=false;btn.textContent=editingAdId?"Enregistrer la modification":"Ajouter au panneau"}
 };
 window.toggleAd=id=>{
   if(!isTrueAdmin())return;
@@ -2032,6 +2051,7 @@ window.deleteAd=id=>{
   if(!isTrueAdmin())return;
   if(!confirm("Supprimer cette publicité ?"))return;
   db.ads=db.ads.filter(x=>x.id!==id);
+  if(editingAdId===id)resetAdEditor();
   queueSync("ad.delete",{adId:id});save();renderAds();renderAdAdmin()
 };
 

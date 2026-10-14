@@ -96,6 +96,7 @@ test('Admin login reports a missing SESSION_SECRET explicitly',async()=>{
 
 test('automatic push, second device, concurrent products, offline recovery and refresh',async()=>{
   documents.clear();const a=browser();await a.login();const b=browser();await b.login();
+  assert.ok([...b.timers.values()].some(t=>t.interval&&t.delay===1000),'remote polling must run every second');
   a.read(`db.products.push(${JSON.stringify(product())});queueSync('product.create',{productId:'p-one'});save()`);
   await a.autoSync();assert.equal(root().products.length,1);
   await b.read('checkRemoteRevision()');assert.equal(b.read('db.products[0].id'),'p-one');
@@ -232,14 +233,14 @@ test('public order chat and finalization preserve ownership and decrement stock 
 });
 
 test('service worker update, API bypass, offline fallback and old cache cleanup',async()=>{
-  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['mmedpren-v34-cloudinary',new Map()],['unrelated-cache',new Map()]]);
+  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['mmedpren-v34-cloudinary',new Map()],['mmedpren-v35-cloudinary-direct',new Map()],['unrelated-cache',new Map()]]);
   const key=v=>typeof v==='string'?v:v.url;
   const caches={async keys(){return [...stores.keys()]},async delete(k){return stores.delete(k)},async open(k){if(!stores.has(k))stores.set(k,new Map());const store=stores.get(k);return {async addAll(){},async put(k,v){store.set(key(k),v)},async match(k){return store.get(key(k))}}}};
   let network='new deployment',claimed=false,skipped=false;
   const context={URL,Request:class {constructor(url,options){this.url=url;this.options=options}},Response,caches,fetch:async()=>{if(network===null)throw new Error('offline');return new Response(network)},self:{location:{origin:'https://app.test',href:'https://app.test/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>skipped=true,clients:{claim:async()=>claimed=true}}};
   vm.runInNewContext(fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
   let work;handlers.install({waitUntil:p=>work=p});await work;assert.equal(skipped,true);
-  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));assert.ok(!stores.has('mmedpren-v34-cloudinary'));
+  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));assert.ok(!stores.has('mmedpren-v34-cloudinary'));assert.ok(!stores.has('mmedpren-v35-cloudinary-direct'));
   const fetchEvent=async(path,mode='navigate')=>{let result;handlers.fetch({request:{url:'https://app.test'+path,method:'GET',mode},respondWith:p=>result=p});return result};
   assert.equal(await (await fetchEvent('/')).text(),'new deployment');network=null;
   assert.equal(await (await fetchEvent('/index.html')).text(),'new deployment');
@@ -285,6 +286,11 @@ test('Cloudinary: active advertisement URL is synchronized and visible to visito
     await owner.read('syncPending({silent:true})');
     const visitor=browser();await visitor.read('pullRemote({silent:true})');assert.equal(visitor.read('db.ads[0].image'),url);
     assert.match(visitor.w.document.querySelector('#adStage img').src,/res\.cloudinary\.com/);
+    owner.w.editAd('ad-cloud');assert.equal(owner.w.document.querySelector('#adTextInput').value,'Promo');
+    owner.w.document.querySelector('#adTextInput').value='Promo modifiée';await owner.w.document.querySelector('#addAdBtn').onclick();
+    assert.equal(root().ads[0].text,'Promo modifiée');assert.equal(owner.read('editingAdId'),null);
+    owner.w.toggleAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads[0].active,false);
+    owner.w.deleteAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads.length,0);
   }finally{restore()}
 });
 

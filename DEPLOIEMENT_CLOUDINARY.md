@@ -67,6 +67,7 @@ Les trois valeurs doivent venir du même compte Cloudinary. Le test réel du 14 
 - [ ] Une photo produit apparaît dans Cloudinary et Firestore ne contient qu’une URL `https://res.cloudinary.com/...`.
 - [ ] L’article et sa photo sont visibles après F5 et sur un second appareil.
 - [ ] Une publicité active apparaît dans la vitrine sur un second appareil.
+- [ ] Créer, modifier le texte ou l’image, masquer/réactiver puis supprimer une publicité fonctionne et se propage en 2 à 3 secondes en conditions réseau normales.
 - [ ] Hors connexion, les actions métier restent disponibles, mais toute nouvelle image demande Internet et n’est jamais conservée en Base64 dans le stockage local.
 - [ ] Une erreur Cloudinary affiche un échec et ne confirme pas une publication.
 - [ ] La nouvelle version PWA est chargée ; au besoin fermer/réouvrir l’application installée une fois.
