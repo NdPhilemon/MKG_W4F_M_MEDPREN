@@ -232,14 +232,14 @@ test('public order chat and finalization preserve ownership and decrement stock 
 });
 
 test('service worker update, API bypass, offline fallback and old cache cleanup',async()=>{
-  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['unrelated-cache',new Map()]]);
+  const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['mmedpren-v34-cloudinary',new Map()],['unrelated-cache',new Map()]]);
   const key=v=>typeof v==='string'?v:v.url;
   const caches={async keys(){return [...stores.keys()]},async delete(k){return stores.delete(k)},async open(k){if(!stores.has(k))stores.set(k,new Map());const store=stores.get(k);return {async addAll(){},async put(k,v){store.set(key(k),v)},async match(k){return store.get(key(k))}}}};
   let network='new deployment',claimed=false,skipped=false;
   const context={URL,Request:class {constructor(url,options){this.url=url;this.options=options}},Response,caches,fetch:async()=>{if(network===null)throw new Error('offline');return new Response(network)},self:{location:{origin:'https://app.test',href:'https://app.test/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>skipped=true,clients:{claim:async()=>claimed=true}}};
   vm.runInNewContext(fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
   let work;handlers.install({waitUntil:p=>work=p});await work;assert.equal(skipped,true);
-  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));
+  handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));assert.ok(!stores.has('mmedpren-v34-cloudinary'));
   const fetchEvent=async(path,mode='navigate')=>{let result;handlers.fetch({request:{url:'https://app.test'+path,method:'GET',mode},respondWith:p=>result=p});return result};
   assert.equal(await (await fetchEvent('/')).text(),'new deployment');network=null;
   assert.equal(await (await fetchEvent('/index.html')).text(),'new deployment');
@@ -326,12 +326,15 @@ test('Cloudinary: the durable upload quota rejects abusive requests',async()=>{
   }finally{restore()}
 });
 
-test('Cloudinary: offline Base64 stays local then is replaced before Firestore sync',async()=>{
+test('Cloudinary: a new image is never retained as Base64 while offline',async()=>{
   documents.clear();const owner=browser();await owner.login();owner.w.navigator.onLine=false;
-  owner.read(`db.products.push({...${JSON.stringify(product())},photo:${JSON.stringify(jpegData)}});queueSync("product.create");save()`);
-  assert.match(owner.read('db.products[0].photo'),/^data:image/);assert.equal(root().products.length,0);
+  await assert.rejects(owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"products")`),/connexion Internet/);
+  assert.equal(owner.read('db.products.length'),0);assert.doesNotMatch(JSON.stringify(owner.storage()),/data:image/);
   const restore=mockCloudinary();try{
-    owner.w.navigator.onLine=true;owner.w.fetch=request;await owner.read('syncPending({silent:true})');
+    owner.w.navigator.onLine=true;owner.w.fetch=request;
+    const url=await owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"products")`);
+    owner.read(`db.products.push({...${JSON.stringify(product())},photo:${JSON.stringify(url)}});queueSync("product.create");save()`);
+    await owner.read('syncPending({silent:true})');
     assert.match(root().products[0].photo,/^https:\/\/res\.cloudinary\.com/);assert.doesNotMatch(JSON.stringify(root()),/data:image/);
   }finally{restore()}
 });

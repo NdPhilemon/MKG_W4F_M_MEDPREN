@@ -25,7 +25,7 @@ Ce document conserve le diagnostic de stabilisation initial. L’intégration Cl
 - Les changements sont calculés depuis le dernier état confirmé. Les modifications d’éléments différents se fusionnent ; les variations de stock s’additionnent dans une transaction et un stock négatif est refusé. Deux modifications incompatibles du même champ renvoient **409**, en conservant la version locale et sa file.
 - Chaque lot privé possède un identifiant durable et un accusé serveur, pour éviter de réappliquer une vente/variation de stock après une réponse réseau perdue. Les opérations ajoutées pendant l’envoi restent en attente.
 - Les écritures métier, commandes concernées, accusé et révision sont atomiques. La prise d’une commande et sa révision sont également dans une même transaction.
-- Les images passent toujours par `uploadMediaIfNeeded()` → `/api/upload` ; le serveur refuse les données `data:` dans les changements synchronisés. Les images en attente peuvent rester temporairement dans le cache local hors connexion.
+- Les images passent toujours par `uploadMediaIfNeeded()` → `/api/upload` ; le serveur refuse les données `data:` dans les changements synchronisés. Une nouvelle image exige Internet et n’est ajoutée à l’état métier qu’après réception de son URL Cloudinary.
 
 Le choix de `localStorage` conserve le fonctionnement PWA hors ligne et la réouverture d’onglet sans introduire un deuxième système d’authentification. Le jeton reste accessible au JavaScript de la page : ce choix ne remplace pas la prévention des injections HTML. Plusieurs interpolations ont été échappées ; aucun audit externe de sécurité n’est revendiqué.
 
@@ -63,7 +63,7 @@ La conservation du mode « Ouvrir comme » après rechargement et le parcours co
 | `api/sync.js` | Authentification serveur, transactions, droits, commandes, révisions, fusion, idempotence, limites de tentatives et validation des médias. |
 | `api/upload.js` | Authentification/permission, quota durable, formats raster autorisés, taille limitée et upload signé vers Cloudinary. |
 | `lib/cloudinary.js` **nouveau** | Validation binaire, signature SHA-256, appel fournisseur, vérification de réponse et URL optimisée. |
-| `sw.js` | Cache v34, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
+| `sw.js` | Cache v35, réseau prioritaire, fallback hors ligne, cycle de vie attendu, API sans cache. |
 | `vercel.json` | Non-cache pour `/` et revalidation du module de fusion. |
 | `sync-core.js` **nouveau** | Diff/fusion partagés entre navigateur et backend, sans logique de session. |
 | `lib/session.js` **nouveau** | Signature, validation et expiration des jetons ; secret indépendant obligatoire. |

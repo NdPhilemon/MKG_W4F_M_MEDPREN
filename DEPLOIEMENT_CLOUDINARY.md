@@ -34,8 +34,8 @@ Dans **Vercel Dashboard → projet → Settings → Environment Variables**, cr�
 
 | Nom | Type | Cible conseillée |
 |---|---|---|
-| `CLOUDINARY_CLOUD_NAME` | Config/Plain : `sjrjeqvg` | Production |
-| `CLOUDINARY_API_KEY` | Config/Plain : `895771658352413` | Production |
+| `CLOUDINARY_CLOUD_NAME` | Config/Plain : valeur du compte Cloudinary actif | Production |
+| `CLOUDINARY_API_KEY` | Config/Plain : clé du même compte Cloudinary | Production |
 | `CLOUDINARY_API_SECRET` | Sensitive/Secret | Production |
 
 Pour tester un déploiement Preview, ajoutez aussi les trois variables à **Preview**. Le code range automatiquement les médias dans `mmedpren/production/...`, `mmedpren/preview/...` ou `mmedpren/development/...`. Utilisez si possible des identifiants Cloudinary de test séparés pour Preview/Development. Sans ces variables, le site continue à fonctionner, mais tout nouvel upload renvoie une erreur explicite `MEDIA_NOT_CONFIGURED` et aucune URL fictive n’est écrite dans Firestore.
@@ -43,6 +43,8 @@ Pour tester un déploiement Preview, ajoutez aussi les trois variables à **Prev
 Après chaque ajout/modification, déclenchez un **Redeploy**. Les variables sont lues par les fonctions au démarrage du nouveau déploiement.
 
 Le code fourni par la console Cloudinary est un exemple Node.js autonome. Dans cette application, son équivalent est réparti entre `api/upload.js` et `lib/cloudinary.js` : upload signé côté serveur, puis URL de livraison avec `f_auto,q_auto,c_limit,w_1600`. L’API Secret reste uniquement dans Vercel.
+
+Les trois valeurs doivent venir du même compte Cloudinary. Le test réel du 14 octobre 2026 sur la production a réussi et a retourné le cloud `gsn7ul7w`. Si le compte attendu est différent, remplacez ensemble le Cloud name, l’API Key et l’API Secret, puis redéployez.
 
 ## 4. Ordre exact de mise en production
 
@@ -65,7 +67,7 @@ Le code fourni par la console Cloudinary est un exemple Node.js autonome. Dans c
 - [ ] Une photo produit apparaît dans Cloudinary et Firestore ne contient qu’une URL `https://res.cloudinary.com/...`.
 - [ ] L’article et sa photo sont visibles après F5 et sur un second appareil.
 - [ ] Une publicité active apparaît dans la vitrine sur un second appareil.
-- [ ] Hors connexion, l’article/image reste en attente locale ; au retour du réseau, l’URL Cloudinary remplace le Base64 avant Firestore.
+- [ ] Hors connexion, les actions métier restent disponibles, mais toute nouvelle image demande Internet et n’est jamais conservée en Base64 dans le stockage local.
 - [ ] Une erreur Cloudinary affiche un échec et ne confirme pas une publication.
 - [ ] La nouvelle version PWA est chargée ; au besoin fermer/réouvrir l’application installée une fois.
 

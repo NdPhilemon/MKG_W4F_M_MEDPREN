@@ -605,6 +605,9 @@ function clone(x){return JSON.parse(JSON.stringify(x))}
 const STORAGE_KEY="mkg-full-v32";
 const LEGACY_STORAGE_KEYS=["mkg-full-v31","mkg-full-v30","mkg-full-v28","mkg-full-v26","mkg-full-v25","mkg-full-v24","mkg-full-v23","mkg-full-v22","mkg-full-v21"];
 let memoryStore=null;
+function clearLegacyBusinessCaches(){
+  for(const oldKey of [STORAGE_KEY,...LEGACY_STORAGE_KEYS])try{window.localStorage.removeItem(oldKey)}catch(e){}
+}
 function storageGet(){
   try{
     const session=JSON.parse(localStorage.getItem(PERSISTENT_SESSION_KEY)||sessionStorage.getItem(SESSION_KEY)||"null");
@@ -623,9 +626,14 @@ function storageGet(){
 function storageSet(value){
   memoryStore=value;
   const owner=isVisitor()?"public":db.sessionUser?.id||db.impersonatedByAdminId||db.currentUserId;
-  try{window.localStorage.setItem(`mkg-data-${owner}`,value)}catch(e){
-    db.lastSyncError="Stockage local indisponible ou plein : les changements ne survivront pas à une fermeture tant que la sauvegarde échoue.";
-    console.warn(db.lastSyncError);
+  const key=`mkg-data-${owner||"public"}`;
+  try{window.localStorage.setItem(key,value);clearLegacyBusinessCaches();return true}catch(firstError){
+    // Old unscoped caches duplicate the current account and can exhaust mobile localStorage.
+    clearLegacyBusinessCaches();
+    try{window.localStorage.setItem(key,value);return true}catch(e){
+      db.lastSyncError="Stockage local indisponible ou plein : restez connecté pendant la synchronisation, puis rechargez l’application.";
+      console.warn(db.lastSyncError);return false
+    }
   }
 }
 let db;try{const raw=storageGet();db={...clone(seed),...(raw?JSON.parse(raw):{})}}catch(e){db=clone(seed)}
@@ -790,6 +798,7 @@ function privateHeaders(){
 }
 async function uploadMediaIfNeeded(dataUrl,folder="products"){
   if(!dataUrl||typeof dataUrl!=="string"||!dataUrl.startsWith("data:image/"))return dataUrl;
+  if(!navigator.onLine)throw new Error("Une connexion Internet est requise pour envoyer une image vers Cloudinary.");
   if(isVisitor()||(folder==="ads"?!isTrueAdmin():!hasPermission("products.edit")))throw new Error("Envoi d’image non autorisé.");
   if(mediaBytes(dataUrl)>3*1024*1024)throw Object.assign(new Error("Image trop volumineuse : choisissez une image plus petite."),{status:413});
   const epoch=sessionEpoch;
@@ -985,7 +994,7 @@ function businessSnapshot(){
   (out.users||[]).forEach(u=>delete u.password);
   return out
 }
-function persistBusinessState(){storageSet(JSON.stringify(businessSnapshot()))}
+function persistBusinessState(){return storageSet(JSON.stringify(businessSnapshot()))}
 function scrubLegacySecrets(){
   for(const key of [STORAGE_KEY,...LEGACY_STORAGE_KEYS]){
     try{
@@ -1425,7 +1434,7 @@ $("#saveProductBtn").onclick=async()=>{
   if(f){
     if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
     photo=await compressImageFile(f);
-    if(navigator.onLine)photo=await uploadMediaIfNeeded(photo,"products");
+    photo=await uploadMediaIfNeeded(photo,"products");
   }
   if(epoch!==sessionEpoch||productId!==editingProductId)throw new Error("La session ou l’article ouvert a changé pendant l’envoi.");
   if(productId){
@@ -2000,7 +2009,7 @@ if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
   try{
     let image=await compressImageFile(f,1400,.78);
-    if(navigator.onLine)image=await uploadMediaIfNeeded(image,"ads");
+    image=await uploadMediaIfNeeded(image,"ads");
     if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi.");
     const ad={id:uid("ad"),image,text,active:true,createdAt:new Date().toISOString()};
     db.ads.push(ad);
