@@ -4,7 +4,7 @@ FIREBASE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
 CLOUDINARY_CLOUD_NAME=sjrjeqvg
 CLOUDINARY_API_KEY=895771658352413
 CLOUDINARY_API_SECRET=
-ADMIN_EMAIL=abrahamfaith325@gmail.com
+ADMIN_EMAIL=ndagonywaphilemon@gmail.com
 ADMIN_PASSWORD=
 SESSION_SECRET=secret-aleatoire-independant-au-moins-32-caracteres
 

@@ -8,11 +8,13 @@ Le code ne contient aucun mot de passe de secours. Dans Vercel, ouvrez le projet
 
 | Nom | Valeur | Environnement |
 |---|---|---|
-| `ADMIN_EMAIL` | `abrahamfaith325@gmail.com` | Production ; Preview si vous y testez |
+| `ADMIN_EMAIL` | `ndagonywaphilemon@gmail.com` | Production ; Preview si vous y testez |
 | `ADMIN_PASSWORD` | le mot de passe communiqué, puis à renouveler après le test | mêmes environnements |
 | `SESSION_SECRET` | secret aléatoire indépendant d’au moins 32 caractères | mêmes environnements |
 
 Choisissez le type **Sensitive/Secret** pour `ADMIN_PASSWORD` et `SESSION_SECRET`. L’adresse email peut être une variable normale. Ne mettez jamais ces valeurs dans `index.html`, GitHub, une capture d’écran ou un message public. Le mot de passe communiqué pour ce test doit être changé après validation, puisqu’il a été partagé dans une conversation.
+
+Les trois variables Administrateur sont obligatoires. Si `SESSION_SECRET` manque ou fait moins de 32 caractères, l’email et le mot de passe peuvent être corrects mais la création de la session échoue avec `SESSION_NOT_CONFIGURED`.
 
 Une modification de variable Vercel ne change pas un déploiement existant : ouvrez **Deployments**, choisissez le dernier commit puis **Redeploy**. Une rotation de `SESSION_SECRET` déconnecte toutes les sessions existantes ; c’est attendu.
 

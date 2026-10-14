@@ -261,7 +261,8 @@ export default async function handler(req,res){
   }catch(e){
     const status=e instanceof SyntaxError?400:e.status||500;
     console.error('FIREBASE_SYNC_API',{status,code:e.code||'SERVER_ERROR'});
-    const publicError=e.code==='ADMIN_NOT_CONFIGURED'?e.message:status>=500?'Service temporairement indisponible':e.message;
+    const configurationError=['ADMIN_NOT_CONFIGURED','SESSION_NOT_CONFIGURED'].includes(e.code);
+    const publicError=configurationError?e.message:status>=500?'Service temporairement indisponible':e.message;
     return send(res,status,{ok:false,provider:'firebase',code:e.code||'SERVER_ERROR',error:publicError});
   }
 }

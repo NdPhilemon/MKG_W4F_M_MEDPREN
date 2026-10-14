@@ -85,6 +85,15 @@ test('Admin login, refresh, reopened tab, routes, remote session injection and l
   assert.equal(browser(a.storage()).read('isVisitor()'),true);
 });
 
+test('Admin login reports a missing SESSION_SECRET explicitly',async()=>{
+  documents.clear();const saved=process.env.SESSION_SECRET;delete process.env.SESSION_SECRET;
+  try{
+    const result=await request('/api/sync',{method:'POST',body:JSON.stringify({action:'auth',type:'admin',email:'owner@example.test',secret:'test-only-password'})});
+    assert.equal(result.status,503);assert.equal(result.data.code,'SESSION_NOT_CONFIGURED');
+    assert.match(result.data.error,/SESSION_SECRET/);
+  }finally{process.env.SESSION_SECRET=saved}
+});
+
 test('automatic push, second device, concurrent products, offline recovery and refresh',async()=>{
   documents.clear();const a=browser();await a.login();const b=browser();await b.login();
   a.read(`db.products.push(${JSON.stringify(product())});queueSync('product.create',{productId:'p-one'});save()`);
