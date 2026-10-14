@@ -5,7 +5,7 @@
   "type": "module",
   "engines": {"node": "24.x"},
   "scripts": {
-    "build": "node scripts/check-build.mjs",
+    "verify": "node scripts/check-build.mjs",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

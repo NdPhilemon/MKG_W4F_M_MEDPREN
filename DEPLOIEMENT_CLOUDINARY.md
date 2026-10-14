@@ -32,13 +32,15 @@ Dans **Vercel Dashboard → projet → Settings → Environment Variables**, cr�
 
 | Nom | Type | Cible conseillée |
 |---|---|---|
-| `CLOUDINARY_CLOUD_NAME` | Config/Plain | Production |
-| `CLOUDINARY_API_KEY` | Sensitive/Secret | Production |
+| `CLOUDINARY_CLOUD_NAME` | Config/Plain : `sjrjeqvg` | Production |
+| `CLOUDINARY_API_KEY` | Config/Plain : `895771658352413` | Production |
 | `CLOUDINARY_API_SECRET` | Sensitive/Secret | Production |
 
 Pour tester un déploiement Preview, ajoutez aussi les trois variables à **Preview**. Le code range automatiquement les médias dans `mmedpren/production/...`, `mmedpren/preview/...` ou `mmedpren/development/...`. Utilisez si possible des identifiants Cloudinary de test séparés pour Preview/Development. Sans ces variables, le site continue à fonctionner, mais tout nouvel upload renvoie une erreur explicite `MEDIA_NOT_CONFIGURED` et aucune URL fictive n’est écrite dans Firestore.
 
 Après chaque ajout/modification, déclenchez un **Redeploy**. Les variables sont lues par les fonctions au démarrage du nouveau déploiement.
+
+Le code fourni par la console Cloudinary est un exemple Node.js autonome. Dans cette application, son équivalent est réparti entre `api/upload.js` et `lib/cloudinary.js` : upload signé côté serveur, puis URL de livraison avec `f_auto,q_auto,c_limit,w_1600`. L’API Secret reste uniquement dans Vercel.
 
 ## 4. Ordre exact de mise en production
 

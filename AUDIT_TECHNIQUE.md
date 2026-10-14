@@ -33,7 +33,7 @@ Le choix de `localStorage` conserve le fonctionnement PWA hors ligne et la réou
 
 Commande : `npm test` avec Node.js 24. Les tests chargent le HTML et le JavaScript réels dans jsdom. Les handlers réels utilisent un substitut Firestore en mémoire, avec transactions sérialisées, lectures avant écritures et application atomique. Le service worker est exécuté dans un contexte simulant les API Cache/Fetch.
 
-Résultat de la stabilisation initiale : **13 tests réussis, 0 échec**. La campagne finale Cloudinary ajoute les parcours d’upload, de publication multi-appareils, de panne fournisseur, de quota et de reprise hors ligne : **21 tests réussis, 0 échec**. Le contrôle `npm run build` réussit également.
+Résultat de la stabilisation initiale : **13 tests réussis, 0 échec**. La campagne finale Cloudinary ajoute les parcours d’upload, de publication multi-appareils, de panne fournisseur, de quota et de reprise hors ligne : **21 tests réussis, 0 échec**. Le contrôle `npm run verify` réussit également. Il porte volontairement un autre nom que `build` afin de conserver le déploiement statique zéro configuration de Vercel.
 
 | Scénario demandé | Résultat local |
 |---|---|

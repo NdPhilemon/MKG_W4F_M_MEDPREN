@@ -242,7 +242,7 @@ test('Cloudinary: authenticated Admin upload returns an optimized HTTPS URL',asy
   try{
     const result=await request('/api/upload',{method:'POST',headers:{'x-sync-token':owner.read('db.syncAuth.token')},body:JSON.stringify({folder:'products',dataUrl:jpegData})});
     assert.equal(result.status,200);assert.equal(result.data.provider,'cloudinary');
-    assert.match(result.data.url,/^https:\/\/res\.cloudinary\.com\/test-cloud\/image\/upload\/f_auto,q_auto\//);
+    assert.match(result.data.url,/^https:\/\/res\.cloudinary\.com\/test-cloud\/image\/upload\/f_auto,q_auto,c_limit,w_1600\//);
     assert.match(result.data.publicId,/^mmedpren\/development\/products\/[a-f0-9]{64}$/);
   }finally{restore()}
 });
