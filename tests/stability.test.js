@@ -338,3 +338,17 @@ test('Cloudinary: a new image is never retained as Base64 while offline',async()
     assert.match(root().products[0].photo,/^https:\/\/res\.cloudinary\.com/);assert.doesNotMatch(JSON.stringify(root()),/data:image/);
   }finally{restore()}
 });
+
+test('Cloudinary: a legacy Base64 advertisement can be migrated to a URL',async()=>{
+  documents.clear();const owner=browser();await owner.login();const token=owner.read('db.syncAuth.token');
+  const legacy={id:'ad-legacy',image:jpegData,text:'Ancienne publicité',active:true};
+  const seeded={...root(),ads:[legacy],revision:Number(root().revision||0)+1};documents.set('mmedpren/global',seeded);
+  const restore=mockCloudinary();try{
+    const uploaded=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({folder:'ads',dataUrl:jpegData})});
+    assert.equal(uploaded.status,200);
+    const after={...legacy,image:uploaded.data.url};
+    const migrated=await request('/api/sync',{method:'POST',body:JSON.stringify({action:'sync',auth:{token},requestId:'migration-ad-legacy',baseRevision:seeded.revision,changes:[{key:'ads',id:legacy.id,before:legacy,after}]})});
+    assert.equal(migrated.status,200);assert.match(root().ads[0].image,/^https:\/\/res\.cloudinary\.com/);
+    assert.doesNotMatch(JSON.stringify(root()),/data:image/);
+  }finally{restore()}
+});

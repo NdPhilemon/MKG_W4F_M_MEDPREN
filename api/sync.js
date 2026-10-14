@@ -179,7 +179,9 @@ async function syncPrivate(body,token){
       changes=MkgSync.diff({...current,orders:[]},body.state||{}).filter(c=>c.key!=='orders');
     }
     if(changes.length>150)throw error(413,'Trop de modifications dans un seul envoi');
-    validateMedia(changes);validateChanges(changes,a,current);
+    // Legacy rows may still contain Base64 in `before`; only the new value must be URL-only.
+    for(const change of changes)validateMedia(change?.after);
+    validateChanges(changes,a,current);
     const orderChanges=changes.filter(c=>c.key==='orders');
     const orderDocs=[];
     for(const c of orderChanges){if(!safeId(c.id))throw error(400,'Commande invalide');orderDocs.push(await t.get(ORDERS.doc(c.id)))}
