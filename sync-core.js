@@ -1,6 +1,6 @@
 // Shared by the browser and the server. No session data belongs here.
 (() => {
-  const lists = ['shops', 'users', 'products', 'ads', 'sales', 'orders', 'notifications'];
+  const lists = ['shops', 'users', 'products', 'ads', 'sales', 'moneyTransactions', 'orders', 'notifications'];
   const fields = ['rate', 'mainCurrency', 'hideMoney', 'shopSettings', 'adminProfile'];
   const copy = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
   const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);

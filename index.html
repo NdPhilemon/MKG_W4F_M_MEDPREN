@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
 <meta name="theme-color" content="#ff7a00">
+<meta name="description" content="MKG-W4F M'MEDPREN — gestion de boutique, ventes, commandes et articles.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MKG-W4F M'MEDPREN">
+<meta property="og:title" content="MKG-W4F M'MEDPREN">
+<meta property="og:description" content="Votre boutique mieux organisée, plus intelligente.">
+<meta property="og:url" content="https://mkgw4fmmedpren.vercel.app/">
+<meta property="og:image" content="https://mkgw4fmmedpren.vercel.app/logo.png">
+<meta property="og:image:alt" content="Logo MKG-W4F M'MEDPREN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://mkgw4fmmedpren.vercel.app/logo.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="logo.png">
 <link rel="apple-touch-icon" href="logo.png">
@@ -49,6 +59,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 9px;border-bottom:1
 tfoot td{font-weight:900;background:var(--soft);color:var(--text)}
 .pill{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:11px;font-weight:800}.pill.red{color:var(--danger)}.pill.green{color:var(--ok)}.pill.warn{color:var(--warn)}
 .product{display:flex;align-items:center;gap:10px}.thumb{width:48px;height:48px;border-radius:13px;border:1px solid var(--line);background:var(--soft);object-fit:cover;display:grid;place-items:center}
+.zoomable{cursor:zoom-in}.saleItems{display:grid;gap:7px;min-width:210px}.saleItem{display:flex;align-items:center;gap:8px}.saleItem .thumb{width:42px;height:42px}.saleItem small{display:block;max-width:220px}.saleDraft{display:grid;gap:8px;margin-top:8px}.saleDraftRow{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:13px}.saleDraftRow>div{flex:1}.lightbox{align-items:center!important}.lightbox .sheet{width:min(94vw,980px);height:min(90vh,820px);border-radius:22px;padding:12px;display:flex;flex-direction:column}.lightbox img{width:100%;height:calc(90vh - 90px);object-fit:contain;border-radius:15px;background:#111}.moneyForm{margin-top:14px}
 .shopgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .notifs{position:fixed;right:14px;top:68px;z-index:70;width:min(410px,94vw);max-height:72vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:none}.notifs.open{display:block}.notif{padding:14px 16px;border-bottom:1px solid var(--line)}.notif:last-child{border:0}.notif small{color:var(--muted)}
 .bottom{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--nav);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));padding:7px 7px calc(7px + env(safe-area-inset-bottom))}
@@ -224,20 +235,20 @@ body.internal-mode .bottom .nav{min-width:76px}
 
   <div class="grid">
     <div class="card"><div class="muted">Chiffre d’affaires</div><div class="metric money hidden"><span class="dots">••••••</span><span id="revMetric" class="real">$0</span></div><div class="hint" id="revCdfMetric"></div></div>
-    <div class="card adminOnly"><div class="muted">Bénéfice brut</div><div class="metric money hidden"><span class="dots">••••••</span><span id="profitMetric" class="real">$0</span></div><div class="hint" id="profitCdfMetric"></div></div>
+    <div class="card profitOnly"><div class="muted">Bénéfice brut</div><div class="metric money hidden"><span class="dots">••••••</span><span id="profitMetric" class="real">$0</span></div><div class="hint" id="profitCdfMetric"></div></div>
     <div class="card"><div class="muted">Ventes enregistrées</div><div id="salesMetric" class="metric">0</div><div id="itemsMetric" class="muted">0 article vendu</div></div>
     <div class="card"><div class="muted">Alertes de stock</div><div id="stockMetric" class="metric">0</div><div class="muted">Articles à réapprovisionner</div></div>
   </div>
 
   <div class="sectionHead"><h2>Dernières ventes</h2></div>
-  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Articles</th><th>Paiement</th><th>Total</th><th class="adminOnly">Coût achat</th><th class="adminOnly">Bénéfice</th><th>Vendeur</th></tr></thead><tbody id="recentSales"></tbody><tfoot id="recentSalesFoot"></tfoot></table></div>
+  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Articles</th><th>Paiement</th><th>Total</th><th class="profitOnly">Coût achat</th><th class="profitOnly">Bénéfice</th><th>Vendeur</th></tr></thead><tbody id="recentSales"></tbody><tfoot id="recentSalesFoot"></tfoot></table></div>
 </section>
 
 <section id="sales" class="panel">
   <div class="eyebrow">VENTES</div><h1 class="title">Ventes</h1>
   <p class="sub">Détail financier complet pour l’administrateur.</p>
   <div class="row"><button class="btn" id="newSaleBtn2">＋ Nouvelle vente</button><input id="saleSearch" class="input grow" placeholder="Reçu, acheteur, vendeur, article…"></div>
-  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Moyen de paiement</th><th>Total payé</th><th class="adminOnly">Prix d’achat total</th><th class="adminOnly">Prix de vente total</th><th class="adminOnly">Bénéfice</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="salesTable"></tbody><tfoot id="salesFoot"></tfoot></table></div>
+  <div class="box"><table><thead><tr><th>Reçu</th><th>Date</th><th>Acheteur</th><th>Articles et détails</th><th>Moyen de paiement</th><th>Total payé</th><th class="profitOnly">Prix d’achat total</th><th class="adminOnly">Prix de vente total</th><th class="profitOnly">Bénéfice</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="salesTable"></tbody><tfoot id="salesFoot"></tfoot></table></div>
 </section>
 
 <section id="products" class="panel">
@@ -246,10 +257,10 @@ body.internal-mode .bottom .nav{min-width:76px}
   <div class="toolbar"><input id="productSearch" class="input grow" placeholder="Rechercher un article…"><select id="categoryFilter" class="input"></select><button class="btn adminOnly" id="addProductBtn">＋ Ajouter</button></div>
   <div class="box"><table><thead><tr>
     <th>Article</th><th>Catégorie</th><th>Stock</th>
-    <th class="adminOnly">Achat saisi</th><th class="adminOnly">Équiv. achat</th>
+    <th class="profitOnly">Achat saisi</th><th class="profitOnly">Équiv. achat</th>
     <th>Vente saisie</th><th>Équiv. vente</th>
-    <th class="adminOnly">Bénéfice/unité USD</th><th class="adminOnly">Bénéfice/unité CDF</th>
-    <th class="adminOnly">Bénéfice potentiel stock</th><th class="adminOnly">Public</th><th class="adminOnly">Actions</th>
+    <th class="profitOnly">Bénéfice/unité USD</th><th class="profitOnly">Bénéfice/unité CDF</th>
+    <th class="profitOnly">Bénéfice potentiel stock</th><th class="adminOnly">Public</th><th class="adminOnly">Actions</th>
   </tr></thead><tbody id="productsTable"></tbody><tfoot id="productsFoot"></tfoot></table></div>
 </section>
 
@@ -279,7 +290,7 @@ body.internal-mode .bottom .nav{min-width:76px}
   <div id="shopGrid" class="shopgrid" style="margin-top:16px"></div>
 </section>
 
-<section id="reports" class="panel adminOnly">
+<section id="reports" class="panel reportOnly">
   <div class="eyebrow">RAPPORTS ADMINISTRATEUR</div><h1 class="title">Rapports détaillés</h1>
   <p class="sub">Chaque article vendu avec prix d’achat, prix de vente, différence bénéficiaire et totaux.</p>
   <div class="toolbar">
@@ -291,8 +302,8 @@ body.internal-mode .bottom .nav{min-width:76px}
     <div class="kpi"><span class="muted">Ventes</span><b id="reportSalesCount">0</b></div>
     <div class="kpi"><span class="muted">Articles</span><b id="reportItemsCount">0</b></div>
     <div class="kpi"><span class="muted">CA USD</span><b id="reportRevenue">$0</b></div>
-    <div class="kpi"><span class="muted">Coût achat USD</span><b id="reportCost">$0</b></div>
-    <div class="kpi"><span class="muted">Bénéfice USD</span><b id="reportProfit">$0</b></div>
+    <div class="kpi profitOnly"><span class="muted">Coût achat USD</span><b id="reportCost">$0</b></div>
+    <div class="kpi profitOnly"><span class="muted">Bénéfice USD</span><b id="reportProfit">$0</b></div>
   </div>
   <div class="box">
     <h2 style="margin-top:0">Répartition par moyen de paiement</h2>
@@ -300,10 +311,37 @@ body.internal-mode .bottom .nav{min-width:76px}
   </div>
   <div class="box"><table><thead><tr>
     <th>Date</th><th>Reçu</th><th>Article</th><th>Qté</th><th>Paiement</th>
-    <th>Achat U.</th><th>Vente U.</th><th>Bénéfice U.</th>
-    <th>Achat total</th><th>Vente totale</th><th>Bénéfice total</th>
+    <th class="profitOnly">Achat U.</th><th>Vente U.</th><th class="profitOnly">Bénéfice U.</th>
+    <th class="profitOnly">Achat total</th><th>Vente totale</th><th class="profitOnly">Bénéfice total</th>
     <th>Vendeur</th><th>Acheteur</th><th class="ownerAdminOnly">Action</th>
   </tr></thead><tbody id="reportTable"></tbody><tfoot id="reportFoot"></tfoot></table></div>
+</section>
+
+<section id="money" class="panel moneyOnly">
+  <div class="eyebrow">MOBILE MONEY</div><h1 class="title">Transactions d’argent</h1>
+  <p class="sub">Dépôts, envois et retraits sur M-Pesa, Airtel Money, Orange Money, Equity et autres réseaux.</p>
+  <div class="grid4">
+    <div class="card"><div class="muted">Transactions</div><div id="moneyCount" class="metric">0</div></div>
+    <div class="card"><div class="muted">Volume USD</div><div id="moneyVolume" class="metric">$0</div></div>
+    <div class="card"><div class="muted">Mouvement caisse</div><div id="moneyCash" class="metric">$0</div></div>
+    <div class="card profitOnly"><div class="muted">Commissions</div><div id="moneyCommission" class="metric">$0</div></div>
+  </div>
+  <div class="box moneyManageOnly">
+    <h2 style="margin-top:0">Nouvelle transaction</h2>
+    <div class="formgrid moneyForm">
+      <div class="field"><label>Opération</label><select id="moneyType"><option value="deposit">Dépôt</option><option value="send">Envoi</option><option value="withdrawal">Retrait</option></select></div>
+      <div class="field"><label>Réseau</label><select id="moneyNetwork"></select></div>
+      <div class="field"><label>Montant</label><input id="moneyAmount" type="number" min="0.01" step="0.01"></div>
+      <div class="field"><label>Devise</label><select id="moneyCurrency"><option>USD</option><option>CDF</option></select></div>
+      <div class="field profitOnly"><label>Commission gagnée</label><input id="moneyFee" type="number" min="0" step="0.01" value="0"></div>
+      <div class="field"><label>Client / téléphone</label><input id="moneyCustomer"></div>
+      <div class="field"><label>Référence</label><input id="moneyReference"></div>
+      <div class="field"><label>Note</label><input id="moneyNote"></div>
+    </div>
+    <div class="actions"><button id="saveMoneyBtn" class="btn">Enregistrer la transaction</button></div>
+  </div>
+  <div class="toolbar" style="margin-top:16px"><input id="moneySearch" class="input grow" placeholder="Réseau, référence, client…"><select id="moneyTypeFilter" class="input"><option value="">Toutes les opérations</option><option value="deposit">Dépôts</option><option value="send">Envois</option><option value="withdrawal">Retraits</option></select></div>
+  <div class="box"><table><thead><tr><th>Date</th><th>Opération</th><th>Réseau</th><th>Client</th><th>Référence</th><th>Montant</th><th class="profitOnly">Commission</th><th>Agent</th><th>Action</th></tr></thead><tbody id="moneyTable"></tbody><tfoot id="moneyFoot"></tfoot></table></div>
 </section>
 
 <section id="settings" class="panel ownerAdminOnly">
@@ -458,7 +496,8 @@ body.internal-mode .bottom .nav{min-width:76px}
   <a class="nav internalOnly" data-page="products" href="#products" onclick="go('products',true);return false;"><b>◇</b>Articles</a>
   <a class="nav internalOnly" data-page="staff" href="#staff" onclick="go('staff',true);return false;"><b>♙</b>Personnel</a>
   <a class="nav internalOnly" data-page="shops" href="#shops" onclick="go('shops',true);return false;"><b>🏪</b>Boutique</a>
-  <a class="nav adminOnly internalOnly" data-page="reports" href="#reports" onclick="go('reports',true);return false;"><b>▤</b>Rapports</a>
+  <a class="nav reportOnly internalOnly" data-page="reports" href="#reports" onclick="go('reports',true);return false;"><b>▤</b>Rapports</a>
+  <a class="nav moneyOnly internalOnly" data-page="money" href="#money" onclick="go('money',true);return false;"><b>⇄</b>Mobile Money</a>
   <a class="nav internalOnly" data-page="orders" href="#orders" onclick="go('orders',true);return false;"><b>💬</b>Commandes</a>
 </nav>
 
@@ -467,8 +506,9 @@ body.internal-mode .bottom .nav{min-width:76px}
   <div class="formgrid">
     <div class="field"><label>Acheteur (facultatif)</label><input id="buyerName"></div>
     <div class="field"><label>Téléphone / WhatsApp (facultatif)</label><input id="buyerPhone"></div>
-    <div class="field full"><label>Article</label><select id="saleProduct"></select></div>
+    <div class="field"><label>Article</label><select id="saleProduct"></select></div>
     <div class="field"><label>Quantité</label><input id="saleQty" type="number" min="1" value="1"></div>
+    <div class="field full"><button type="button" class="btn alt" id="addSaleItemBtn">＋ Ajouter cet article à la vente</button><div id="saleItemsEditor" class="saleDraft"></div></div>
     <div class="field"><label>Devise payée</label><select id="saleCurrency"><option>USD</option><option>CDF</option></select></div>
     <div class="field"><label>Moyen de paiement</label><select id="salePaymentMethod"></select></div>
     <div class="field"><label>Référence de paiement (facultatif)</label><input id="salePaymentRef" placeholder="Ex. ID M-Pesa, référence virement…"></div>
@@ -477,10 +517,12 @@ body.internal-mode .bottom .nav{min-width:76px}
     <div class="field"><label>Total USD</label><input id="saleTotalUsd" disabled></div>
     <div class="field"><label>Total CDF</label><input id="saleTotalCdf" disabled></div>
     <div class="field"><label>Montant payé</label><input id="salePaid" type="number" min="0" step="0.01"></div>
-    <div class="field full adminOnly"><label>Bénéfice estimé de cette vente</label><input id="saleProfitPreview" disabled></div>
+    <div class="field full profitOnly"><label>Bénéfice estimé de cette vente</label><input id="saleProfitPreview" disabled></div>
   </div>
   <div class="actions"><button class="btn alt" data-close>Annuler</button><button class="btn" id="saveSaleBtn">Valider la vente</button></div>
 </div></div>
+
+<div id="imageModal" class="modal lightbox"><div class="sheet"><div class="row"><b id="imageModalTitle">Image de l’article</b><button class="btn alt small" data-close>Fermer</button></div><img id="imageModalView" alt="Image agrandie"></div></div>
 
 <div id="productModal" class="modal"><div class="sheet">
   <h2 id="productModalTitle">Ajouter un article</h2>
@@ -493,7 +535,7 @@ body.internal-mode .bottom .nav{min-width:76px}
     <div class="field"><label>Prix d’achat</label><input id="productBuy" type="number" min="0" step="0.01" placeholder="Montant"></div>
     <div class="field"><label>Devise prix de vente</label><select id="productSellCurrency"><option value="USD">USD</option><option value="CDF">CDF</option></select></div>
     <div class="field"><label>Prix de vente</label><input id="productSell" type="number" min="0" step="0.01" placeholder="Montant"></div>
-    <div class="field full"><label>Photo du produit</label><input id="productPhoto" type="file" accept="image/*"><div class="tiny">Choisissez une photo depuis la Galerie, Photos ou Fichiers de votre téléphone.</div></div>
+    <div class="field full"><label>Photo du produit</label><input id="productPhoto" type="file" accept="image/*"><div class="tiny">Tous les formats photo pris en charge par l’appareil sont acceptés. Choisissez Galerie/Photos/Fichiers ou Appareil photo sur mobile.</div></div>
     <div class="field"><label>Visibilité publique</label><select id="productVisibility"><option value="public">Visible aux visiteurs</option><option value="hidden">Retiré de la boutique publique</option></select></div>
     <div class="field full"><label>Détails</label><textarea id="productDetails" rows="2"></textarea></div>
   </div>
@@ -577,9 +619,11 @@ const PERSISTENT_SESSION_KEY="mkg-auth-session-v32";
 let sessionEpoch=0,localGeneration=0;
 const RCCM="CD/BKV/RCCM/24-A-01446", SHOP_PHONE="0974112163", LOCATION="ISP, Bukavu/Sud-Kivu";
 const PAYMENT_METHODS=["Espèces","M-Pesa","Airtel Money","Orange Money","Afrimoney","Virement bancaire","Carte bancaire","Autre"];
+const MONEY_NETWORKS=["M-Pesa","Airtel Money","Orange Money","Afrimoney","Equity","Autre"];
 const PERMISSIONS=[
  ["sales.create","Créer des ventes"],["sales.all","Voir toutes les ventes"],["sales.own","Voir ses ventes"],
- ["products.view","Voir les articles"],["products.edit","Modifier stock/articles"],["reports.view","Voir rapports et bénéfices"],
+ ["products.view","Voir les articles"],["products.edit","Modifier stock/articles"],["reports.view","Voir les rapports"],["reports.profit","Voir coûts et bénéfices"],
+ ["money.view","Voir le rapport Mobile Money"],["money.manage","Enregistrer les transactions Mobile Money"],
  ["orders.waiting","Voir commandes en attente"],["orders.own","Gérer commandes récupérées"],["staff.manage","Gérer le personnel"],
  ["shops.manage","Gérer les boutiques"],["settings.manage","Modifier les réglages"]
 ];
@@ -595,6 +639,7 @@ const seed={
   products:[],
   ads:[],
   sales:[],
+  moneyTransactions:[],
   orders:[],
   syncQueue:[],
   lastSyncAt:null,serverRevision:0,lastPullAt:null,syncAuth:null,deviceId:null,
@@ -641,6 +686,7 @@ db.sessionType="visitor";db.currentUserId=null;db.role="visitor";db.syncAuth=nul
 (db.users||[]).forEach(u=>delete u.password);
 if(!db.ads) db.ads=[];
 if(!db.orders) db.orders=[];
+if(!db.moneyTransactions) db.moneyTransactions=[];
 if(!db.syncQueue) db.syncQueue=[];
 if(!("serverRevision" in db)) db.serverRevision=0;
 if(!("lastPullAt" in db)) db.lastPullAt=null;
@@ -698,7 +744,7 @@ function ensureLocalPrimaryAdmin(){
 
 }
 ensureLocalPrimaryAdmin();
-let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
+let currentShop="main",editingSaleId=null,editingProductId=null,approvalContext=null,currentReceiptSaleId=null,reportRows=[],saleDraftItems=[],visitorCart=[],selectedOrderId=null,ordersView="waiting";
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 
 let orderChannel=null;try{if("BroadcastChannel" in window)orderChannel=new BroadcastChannel("mkg-w4f-orders")}catch(e){orderChannel=null}
@@ -752,7 +798,7 @@ function sharedState(){
     rate:db.rate,mainCurrency:db.mainCurrency,hideMoney:db.hideMoney,
     shopSettings:db.shopSettings,adminProfile:db.adminProfile,
     shops:db.shops||[],users:isTrueAdmin()?(db.users||[]):(db.users||[]).filter(u=>u.id===db.currentUserId),products:db.products||[],ads:db.ads||[],
-    sales:db.sales||[],orders:db.orders||[],notifications:db.notifications||[]
+    sales:db.sales||[],moneyTransactions:db.moneyTransactions||[],orders:db.orders||[],notifications:db.notifications||[]
   })
 }
 function preserveSessionUser(nextUsers){
@@ -781,6 +827,7 @@ function applyRemoteState(remote,scope="private"){
     if(typeof remote.hideMoney==="boolean")db.hideMoney=remote.hideMoney;
     if(Array.isArray(remote.users))db.users=preserveSessionUser(remote.users);
     if(Array.isArray(remote.sales))db.sales=remote.sales;
+    if(Array.isArray(remote.moneyTransactions))db.moneyTransactions=remote.moneyTransactions;
     if(Array.isArray(remote.orders))db.orders=remote.orders;
     if(Array.isArray(remote.notifications))db.notifications=remote.notifications;
   }else if(Array.isArray(remote.orders)){
@@ -913,12 +960,13 @@ function uid(p="id"){return p+"-"+crypto.randomUUID()}
 
 async function compressImageFile(file,maxSide=1200,quality=.78){
   if(!file)return "";
-  if(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type))throw new Error("Choisissez une image JPEG, PNG, WebP ou GIF.");
+  const extension=(file.name.split(".").pop()||"").toLowerCase(),fallbackMime={jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp",gif:"image/gif",heic:"image/heic",heif:"image/heif",avif:"image/avif",tif:"image/tiff",tiff:"image/tiff",bmp:"image/bmp"}[extension],mime=file.type?.startsWith("image/")?file.type:fallbackMime;
+  if(!mime||mime==="image/svg+xml")throw new Error("Choisissez un fichier photo valide.");
   if(file.size>25*1024*1024)throw new Error("Photo source trop volumineuse (maximum 25 Mio). Réduisez sa taille.");
   const source=URL.createObjectURL(file);
   try{return await new Promise((resolve,reject)=>{
     const img=new Image();
-    img.onerror=()=>reject(new Error("Cette image ne peut pas être décodée. Exportez-la en JPEG ou PNG."));
+    img.onerror=()=>reject(new Error("IMAGE_DECODE_UNAVAILABLE"));
     img.onload=()=>{try{
       if(!img.width||!img.height||img.width*img.height>50000000)throw new Error("Dimensions de photo trop grandes ou invalides.");
       const scale=Math.min(1,maxSide/Math.max(img.width,img.height));
@@ -935,7 +983,12 @@ async function compressImageFile(file,maxSide=1200,quality=.78){
       reject(new Error("L’image reste trop volumineuse après compression. Choisissez une image plus petite."));
     }catch(e){reject(e)}};
     img.src=source;
-  })}finally{URL.revokeObjectURL(source)}
+  })}catch(e){
+    if(e.message!=="IMAGE_DECODE_UNAVAILABLE")throw e;
+    if(file.size>3*1024*1024)throw new Error("Ce format ne peut pas être compressé sur cet appareil et dépasse 3 Mio.");
+    const blob=file.type===mime?file:new Blob([file],{type:mime});
+    return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error("Lecture de la photo impossible."));reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob)})
+  }finally{URL.revokeObjectURL(source)}
 }
 function mediaBytes(dataUrl){const encoded=String(dataUrl).split(",")[1]||"";return Math.floor(encoded.length*3/4)-(encoded.endsWith("==")?2:encoded.endsWith("=")?1:0)}
 
@@ -955,6 +1008,8 @@ function hasPermission(key){
   if(!u)return false;
   return u.permissions?.includes("*")||u.permissions?.includes(key)
 }
+function canSeeProfit(){return isTrueAdmin()||hasPermission("reports.profit")}
+function canViewMoney(){return hasPermission("money.view")||hasPermission("money.manage")}
 function roleLabel(r){return r==="admin"?"Administrateur":r==="manager"?"Gérant":r==="seller"?"Vendeur":"Visiteur"}
 function isVisitor(){return db.sessionType!=="internal"||!db.syncAuth?.token}
 
@@ -1026,9 +1081,9 @@ function saleActive(s){return s.status!=="Annulée"}function saleAgeMin(s){retur
 function notify(title,body){db.notifications.unshift({id:uid("n"),title,body,date:new Date().toISOString(),read:false});db.notifications=db.notifications.slice(0,80);save()}
 function monthReceipt(){const d=new Date(),p=`R${String(d.getFullYear()).slice(-2)}${String(d.getMonth()+1).padStart(2,"0")}-`;return p+String(db.sales.filter(s=>s.receipt.startsWith(p)).length+1).padStart(3,"0")}
 function shortRef(){return"MKG-"+Math.random().toString(36).slice(2,7).toUpperCase()}
-function saleCost(s){return s.items.reduce((a,i)=>a+i.buy*i.qty,0)}
+function saleCost(s){return s.items.reduce((a,i)=>a+(Number(i.buy)||0)*i.qty,0)}
 function saleListPrice(s){return s.items.reduce((a,i)=>a+i.sell*i.qty,0)}
-function saleProfit(s){return s.items.reduce((a,i)=>a+(i.sell-i.buy)*i.qty,0)}
+function saleProfit(s){return s.items.reduce((a,i)=>a+(i.sell-(Number(i.buy)||0))*i.qty,0)}
 function availableShops(){if(isVisitor())return db.shops.filter(s=>s.id==="main");const u=activeUser();if(isTrueAdmin())return db.shops;return db.shops.filter(s=>u?.shops?.includes(s.id))}
 function selectedShopIds(){if(currentShop==="all")return availableShops().map(s=>s.id);return[currentShop]}
 
@@ -1062,6 +1117,10 @@ function render(){
  $$(".internalOnly").forEach(el=>el.style.display=isVisitor()?"none":"");
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");
  $$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
+ $$(".profitOnly").forEach(el=>el.style.display=(!isVisitor()&&canSeeProfit())?"":"none");
+ $$(".reportOnly").forEach(el=>el.style.display=(!isVisitor()&&hasPermission("reports.view"))?"":"none");
+ $$(".moneyOnly").forEach(el=>el.style.display=(!isVisitor()&&canViewMoney())?"":"none");
+ $$(".moneyManageOnly").forEach(el=>el.style.display=(!isVisitor()&&hasPermission("money.manage"))?"":"none");
  $("#shopSelect").style.display=isVisitor()?"none":"";
  $("#settingsQuickBtn").style.display=(!isVisitor()&&isTrueAdmin())?"":"none";
  $("#ordersQuickBtn").style.display=isVisitor()?"none":"";
@@ -1070,10 +1129,12 @@ function render(){
     const canReports=hasPermission("reports.view");
     const canStaff=hasPermission("staff.manage");
     const canShops=hasPermission("shops.manage");
-    const canSettings=hasPermission("settings.manage")||isTrueAdmin();
+     const canSettings=hasPermission("settings.manage")||isTrueAdmin();
+     const canMoney=canViewMoney();
     const reportNav=$('.nav[data-page="reports"]');if(reportNav)reportNav.style.display=canReports?"":"none";
     const staffNav=$('.nav[data-page="staff"]');if(staffNav)staffNav.style.display=canStaff||isTrueAdmin()?"":"none";
-    const shopsNav=$('.nav[data-page="shops"]');if(shopsNav)shopsNav.style.display=canShops||isTrueAdmin()?"":"none";
+     const shopsNav=$('.nav[data-page="shops"]');if(shopsNav)shopsNav.style.display=canShops||isTrueAdmin()?"":"none";
+     const moneyNav=$('.nav[data-page="money"]');if(moneyNav)moneyNav.style.display=canMoney?"":"none";
     $("#settingsQuickBtn").style.display=canSettings?"":"none"
   }
 
@@ -1085,10 +1146,15 @@ function render(){
  }else{
    const activePanel=$(".panel.active");
    if(!activePanel||["storefront","visitorChat"].includes(activePanel.id))go("home",false);
-   if(!isAdmin()&&$("#reports").classList.contains("active"))go("home");
+    if(!hasPermission("reports.view")&&$("#reports").classList.contains("active"))go("home");
+    if(!canViewMoney()&&$("#money").classList.contains("active"))go("home");
    if(!isTrueAdmin()&&$("#settings").classList.contains("active"))go("home");
  }
- renderConversions();renderDashboard();renderProducts();renderSales();renderStaff();renderShops();renderNotifications();renderReport();renderSettings();renderOrders();renderAds();renderAdAdmin();renderNetwork();renderSync();
+  renderConversions();renderDashboard();renderProducts();renderSales();renderStaff();renderShops();renderNotifications();renderReport();renderMoney();renderSettings();renderOrders();renderAds();renderAdAdmin();renderNetwork();renderSync();
+  $$(".profitOnly").forEach(el=>el.style.display=canSeeProfit()?"":"none");
+  $$(".reportOnly").forEach(el=>el.style.display=hasPermission("reports.view")?"":"none");
+  $$(".moneyOnly").forEach(el=>el.style.display=canViewMoney()?"":"none");
+  $$(".moneyManageOnly").forEach(el=>el.style.display=hasPermission("money.manage")?"":"none");
  if($("#saleCorrectionRule")) $("#saleCorrectionRule").textContent=`Le vendeur peut corriger ou annuler directement pendant ${db.shopSettings.correctionWindowMin} minute(s). Au-delà : approbation administrateur requise.`;
  $$(".money").forEach(x=>x.classList.toggle("hidden",db.hideMoney));$("#moneyBtn").textContent=db.hideMoney?"👁 Afficher les montants":"🙈 Masquer les montants";
 }
@@ -1121,18 +1187,18 @@ function renderDashboard(){
  $("#profitMetric").textContent=fmt(profit);$("#profitCdfMetric").textContent=`Équiv. ${fmt(usdToCdf(profit),"CDF")}`;
  $("#salesMetric").textContent=sales.length;$("#itemsMetric").textContent=`${items} article(s) vendu(s)`;$("#stockMetric").textContent=db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock<=3).length;
  const recent=sales.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,7);
- $("#recentSales").innerHTML=recent.map(s=>`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}</td><td>${esc(s.sellerName)}</td></tr>`).join("")||`<tr><td colspan="8" class="muted">Aucune vente.</td></tr>`;
- $("#recentSalesFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(rev)}<br><span class="tiny">${fmt(usdToCdf(rev),"CDF")}</span></td><td class="adminOnly">${fmt(cost)}</td><td class="adminOnly">${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td></td></tr>`;
+ $("#recentSales").innerHTML=recent.map(s=>`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${s.items.reduce((a,i)=>a+i.qty,0)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="profitOnly">${fmt(saleCost(s))}</td><td class="profitOnly positive">${fmt(saleProfit(s))}</td><td>${esc(s.sellerName)}</td></tr>`).join("")||`<tr><td colspan="9" class="muted">Aucune vente.</td></tr>`;
+ $("#recentSalesFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(rev)}<br><span class="tiny">${fmt(usdToCdf(rev),"CDF")}</span></td><td class="profitOnly">${fmt(cost)}</td><td class="profitOnly">${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
 function renderProducts(){
  const q=$("#productSearch").value.toLowerCase(),cat=$("#categoryFilter").value,ids=selectedShopIds();
  const rows=db.products.filter(p=>ids.includes(p.shopId)&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
- $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-p.buy,stockProfit=pu*p.stock;return`<tr>
- <td><div class="product">${p.photo?`<img class="thumb" src="${esc(p.photo)}">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
- <td>${esc(p.category)}</td><td>${p.stock}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(usdToCdf(p.buy),"CDF"):fmt(p.buy)}</td><td class="adminOnly">${p.buyCurrency==="CDF"?fmt(p.buy):fmt(usdToCdf(p.buy),"CDF")}</td>
- <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(Number(p.sell)||0),"CDF"):fmt(Number(p.sell)||0)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="adminOnly positive">${fmt(pu)}</td><td class="adminOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
- <td class="adminOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td>
+ $("#productsTable").innerHTML=rows.map(p=>{const pu=p.sell-(Number(p.buy)||0),stockProfit=pu*p.stock;return`<tr>
+ <td><div class="product">${p.photo?`<img class="thumb zoomable" src="${esc(p.photo)}" alt="${esc(p.name)}" onclick="openProductImage('${p.id}')">`:`<div class="thumb">📦</div>`}<div><b>${esc(p.name)}</b><br><small class="muted">${esc(p.details||"")}</small></div></div></td>
+ <td>${esc(p.category)}</td><td>${p.stock}</td><td class="profitOnly">${p.buyCurrency==="CDF"?fmt(usdToCdf(p.buy),"CDF"):fmt(p.buy)}</td><td class="profitOnly">${p.buyCurrency==="CDF"?fmt(p.buy):fmt(usdToCdf(p.buy),"CDF")}</td>
+ <td>${p.sellCurrency==="CDF"?fmt(usdToCdf(Number(p.sell)||0),"CDF"):fmt(Number(p.sell)||0)}</td><td>${p.sellCurrency==="CDF"?fmt(p.sell):fmt(usdToCdf(p.sell),"CDF")}</td><td class="profitOnly positive">${fmt(pu)}</td><td class="profitOnly positive">${fmt(usdToCdf(pu),"CDF")}</td>
+ <td class="profitOnly positive">${fmt(stockProfit)}<br><span class="tiny">${fmt(usdToCdf(stockProfit),"CDF")}</span></td>
  <td class="adminOnly"><span class="pill ${p.visibleToVisitors===false?"red":"green"}">${p.visibleToVisitors===false?"Retiré":"Visible"}</span></td>
  <td class="adminOnly nowrap">
    <button class="btn alt small" onclick="editProduct('${p.id}')">Modifier</button>
@@ -1140,16 +1206,17 @@ function renderProducts(){
    <button class="btn alt small" onclick="transferProduct('${p.id}')">Transférer</button>
    <button class="btn danger small" onclick="deleteProduct('${p.id}')">Supprimer</button>
  </td></tr>`}).join("")||`<tr><td colspan="11" class="muted">Aucun article.</td></tr>`;
- const totalBuy=rows.reduce((a,p)=>a+p.buy*p.stock,0),totalSell=rows.reduce((a,p)=>a+p.sell*p.stock,0),totalProfit=totalSell-totalBuy,totalQty=rows.reduce((a,p)=>a+p.stock,0);
- $("#productsFoot").innerHTML=`<tr><td colspan="2">TOTAUX STOCK</td><td>${totalQty}</td><td class="adminOnly">${fmt(totalBuy)}</td><td class="adminOnly">${fmt(usdToCdf(totalBuy),"CDF")}</td><td>${fmt(totalSell)}</td><td>${fmt(usdToCdf(totalSell),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly">${fmt(usdToCdf(totalProfit),"CDF")}</td><td class="adminOnly">${fmt(totalProfit)}</td><td class="adminOnly"></td><td></td></tr>`;
+ const totalBuy=rows.reduce((a,p)=>a+(Number(p.buy)||0)*p.stock,0),totalSell=rows.reduce((a,p)=>a+p.sell*p.stock,0),totalProfit=totalSell-totalBuy,totalQty=rows.reduce((a,p)=>a+p.stock,0);
+ $("#productsFoot").innerHTML=`<tr><td colspan="2">TOTAUX STOCK</td><td>${totalQty}</td><td class="profitOnly">${fmt(totalBuy)}</td><td class="profitOnly">${fmt(usdToCdf(totalBuy),"CDF")}</td><td>${fmt(totalSell)}</td><td>${fmt(usdToCdf(totalSell),"CDF")}</td><td class="profitOnly">${fmt(totalProfit)}</td><td class="profitOnly">${fmt(usdToCdf(totalProfit),"CDF")}</td><td class="profitOnly">${fmt(totalProfit)}</td><td class="adminOnly"></td><td></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
+function saleItemsHtml(s){return`<div class="saleItems">${(s.items||[]).map(i=>{const p=db.products.find(x=>x.id===i.productId),photo=i.photo||p?.photo,details=i.details||p?.details||"";return`<div class="saleItem">${photo?`<img class="thumb zoomable" src="${esc(photo)}" alt="${esc(i.name)}" onclick="openSaleItemImage('${s.id}','${i.productId}')">`:`<div class="thumb">📦</div>`}<div><b>${esc(i.name)} × ${i.qty}</b>${details?`<small class="muted">${esc(details)}</small>`:""}</div></div>`}).join("")}</div>`}
 function renderSales(){
  const q=$("#saleSearch").value.toLowerCase(),ids=selectedShopIds();const rows=db.sales.filter(s=>ids.includes(s.shopId)&&(!q||`${esc(s.receipt)} ${s.buyerName} ${s.sellerName} ${s.items.map(i=>i.name).join(" ")}`.toLowerCase().includes(q))).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
- $("#salesTable").innerHTML=rows.map(s=>{let actions=`<button class="btn alt small" onclick="showReceipt('${s.id}')">Reçu</button> `;const age=saleAgeMin(s);if(isAdmin()&&s.status!=="Annulée"){actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;if(s.pendingRequest)actions+=` <button class="btn small" onclick="approveRequest('${s.id}')">Approuver</button>`}else if(!isAdmin()&&s.status!=="Annulée"){if(age<=db.shopSettings.correctionWindowMin)actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;else actions+=`<button class="btn alt small" onclick="requestApproval('${s.id}','edit')">Demander correction</button> <button class="btn alt small" onclick="requestApproval('${s.id}','cancel')">Demander annulation</button>`}
- return`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="adminOnly">${fmt(saleCost(s))}</td><td class="adminOnly">${fmt(saleListPrice(s))}</td><td class="adminOnly positive">${fmt(saleProfit(s))}<br><span class="tiny">${fmt(usdToCdf(saleProfit(s)),"CDF")}</span></td><td><span class="pill ${s.status==="Annulée"?"red":"green"}">${s.status}</span></td><td class="nowrap">${actions}</td></tr>`}).join("");
+ $("#salesTable").innerHTML=rows.map(s=>{let actions=`<button class="btn alt small" onclick="showReceipt('${s.id}')">Reçu</button> `;const age=saleAgeMin(s);if(isAdmin()&&s.status!=="Annulée"){actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;if(s.pendingRequest)actions+=` <button class="btn small" onclick="approveRequest('${s.id}')">Approuver</button>`}else if(!isAdmin()&&s.status!=="Annulée"){if(age<=db.shopSettings.correctionWindowMin)actions+=`<button class="btn alt small" onclick="editSale('${s.id}')">Corriger</button> <button class="btn danger small" onclick="cancelSale('${s.id}')">Annuler</button>`;else actions+=`<button class="btn alt small" onclick="requestApproval('${s.id}','edit')">Demander correction</button> <button class="btn alt small" onclick="requestApproval('${s.id}','cancel')">Demander annulation</button>`}else if(isTrueAdmin()&&s.status==="Annulée")actions+=`<button class="btn danger small" onclick="deleteCancelledSale('${s.id}')">Supprimer</button>`;
+ return`<tr><td>${esc(s.receipt)}</td><td>${displayDate(s.createdAt)}</td><td>${esc(s.buyerName||"—")}</td><td>${saleItemsHtml(s)}</td><td>${esc(s.paymentMethod||"Espèces")}${s.paymentRef?`<br><span class="tiny">${esc(s.paymentRef)}</span>`:""}</td><td>${fmt(s.paidTotal,s.currency)}</td><td class="profitOnly">${fmt(saleCost(s))}</td><td class="adminOnly">${fmt(saleListPrice(s))}</td><td class="profitOnly positive">${fmt(saleProfit(s))}<br><span class="tiny">${fmt(usdToCdf(saleProfit(s)),"CDF")}</span></td><td><span class="pill ${s.status==="Annulée"?"red":"green"}">${s.status}</span></td><td class="nowrap">${actions}</td></tr>`}).join("")||`<tr><td colspan="11" class="muted">Aucune vente.</td></tr>`;
  const active=rows.filter(s=>saleActive(s)),totalPaidUsd=active.reduce((a,s)=>a+s.usdEquivalent,0),totalCost=active.reduce((a,s)=>a+saleCost(s),0),totalSale=active.reduce((a,s)=>a+saleListPrice(s),0),totalProfit=active.reduce((a,s)=>a+saleProfit(s),0);
- $("#salesFoot").innerHTML=`<tr><td colspan="4">TOTAUX</td><td>${fmt(totalPaidUsd)}<br><span class="tiny">${fmt(usdToCdf(totalPaidUsd),"CDF")}</span></td><td class="adminOnly">${fmt(totalCost)}</td><td class="adminOnly">${fmt(totalSale)}</td><td class="adminOnly">${fmt(totalProfit)}<br><span class="tiny">${fmt(usdToCdf(totalProfit),"CDF")}</span></td><td colspan="2"></td></tr>`;
+ $("#salesFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(totalPaidUsd)}<br><span class="tiny">${fmt(usdToCdf(totalPaidUsd),"CDF")}</span></td><td class="profitOnly">${fmt(totalCost)}</td><td class="adminOnly">${fmt(totalSale)}</td><td class="profitOnly">${fmt(totalProfit)}<br><span class="tiny">${fmt(usdToCdf(totalProfit),"CDF")}</span></td><td colspan="2"></td></tr>`;
  $$(".adminOnly").forEach(el=>el.style.display=(!isVisitor()&&isAdmin())?"":"none");$$(".ownerAdminOnly").forEach(el=>el.style.display=(!isVisitor()&&isTrueAdmin())?"":"none");
 }
 function renderStaff(){
@@ -1223,6 +1290,8 @@ $("#saveAccessBtn").onclick=()=>{
   const shops=$$("#accessShopChecks input:checked").map(x=>x.value);
   if(!shops.length)return alert("Attribuez au moins une boutique.");
   const perms=$$("#accessPermissionChecks input:checked").map(x=>x.value);
+  if(perms.includes("reports.profit")&&!perms.includes("reports.view"))perms.push("reports.view");
+  if(perms.includes("money.manage")&&!perms.includes("money.view"))perms.push("money.view");
   u.role=role;u.shops=shops;u.permissions=role==="admin"?["*"]:perms;
   if(!u.isPrimary)u.accessCode=$("#accessCodeDisplay").textContent.trim();
   u.status="Actif";u.suspendedUntil=null;
@@ -1263,8 +1332,8 @@ window.deleteUser=id=>{
 };
 function renderShops(){$("#shopGrid").innerHTML=db.shops.map(s=>`<div class="card"><h3>${esc(s.name)}</h3><p class="muted">${esc(s.location)}</p><p>${db.products.filter(p=>p.shopId===s.id).length} article(s) · ${db.sales.filter(v=>v.shopId===s.id&&saleActive(v)).length} vente(s)</p><button class="btn alt small adminOnly" onclick="selectShop('${s.id}')">Ouvrir</button></div>`).join("");$$(".adminOnly").forEach(el=>el.style.display=isAdmin()?"":"none")}
 function renderNotifications(){const unread=db.notifications.filter(n=>!n.read).length;$("#notifBadge").textContent=unread;$("#notifBadge").style.display=unread?"grid":"none";$("#notifPanel").innerHTML=`<div class="notif"><div class="row"><b>Notifications</b><button class="btn alt small" onclick="markAllRead()">Tout lire</button></div></div>`+db.notifications.map(n=>`<div class="notif"><b>${esc(n.title)}</b><div>${esc(n.body)}</div><small>${displayDate(n.date)}</small></div>`).join("")}
-function buildReportRows(){const wd=$("#weekdayFilter").value,start=$("#reportStart").value,end=$("#reportEnd").value,shop=$("#reportShop").value;let sales=db.sales.filter(s=>saleActive(s));if(shop)sales=sales.filter(s=>s.shopId===shop);if(start)sales=sales.filter(s=>new Date(s.createdAt)>=new Date(start+"T00:00:00"));if(end)sales=sales.filter(s=>new Date(s.createdAt)<=new Date(end+"T23:59:59"));if(wd!=="")sales=sales.filter(s=>String(new Date(s.createdAt).getDay())===wd);const rows=[];sales.forEach(s=>s.items.forEach(i=>rows.push({sale:s,item:i,cost:i.buy*i.qty,saleTotal:i.sell*i.qty,profit:(i.sell-i.buy)*i.qty})));return rows.sort((a,b)=>new Date(b.sale.createdAt)-new Date(a.sale.createdAt))}
-function renderReport(){if(!isAdmin())return;reportRows=buildReportRows();const ids=new Set(reportRows.map(r=>r.sale.id)),qty=reportRows.reduce((a,r)=>a+r.item.qty,0),cost=reportRows.reduce((a,r)=>a+r.cost,0),rev=reportRows.reduce((a,r)=>a+r.saleTotal,0),profit=reportRows.reduce((a,r)=>a+r.profit,0);$("#reportSalesCount").textContent=ids.size;$("#reportItemsCount").textContent=qty;$("#reportRevenue").textContent=fmt(rev);$("#reportCost").textContent=fmt(cost);$("#reportProfit").textContent=fmt(profit);
+function buildReportRows(){const wd=$("#weekdayFilter").value,start=$("#reportStart").value,end=$("#reportEnd").value,shop=$("#reportShop").value;let sales=db.sales.filter(s=>saleActive(s));if(shop)sales=sales.filter(s=>s.shopId===shop);if(start)sales=sales.filter(s=>new Date(s.createdAt)>=new Date(start+"T00:00:00"));if(end)sales=sales.filter(s=>new Date(s.createdAt)<=new Date(end+"T23:59:59"));if(wd!=="")sales=sales.filter(s=>String(new Date(s.createdAt).getDay())===wd);const rows=[];sales.forEach(s=>s.items.forEach(i=>{const buy=Number(i.buy)||0;rows.push({sale:s,item:i,cost:buy*i.qty,saleTotal:i.sell*i.qty,profit:(i.sell-buy)*i.qty})}));return rows.sort((a,b)=>new Date(b.sale.createdAt)-new Date(a.sale.createdAt))}
+function renderReport(){if(!hasPermission("reports.view"))return;reportRows=buildReportRows();const ids=new Set(reportRows.map(r=>r.sale.id)),qty=reportRows.reduce((a,r)=>a+r.item.qty,0),cost=reportRows.reduce((a,r)=>a+r.cost,0),rev=reportRows.reduce((a,r)=>a+r.saleTotal,0),profit=reportRows.reduce((a,r)=>a+r.profit,0);$("#reportSalesCount").textContent=ids.size;$("#reportItemsCount").textContent=qty;$("#reportRevenue").textContent=fmt(rev);$("#reportCost").textContent=fmt(cost);$("#reportProfit").textContent=fmt(profit);
  const paymentMap={};
  reportRows.forEach(r=>{
    const key=r.sale.paymentMethod||"Espèces";
@@ -1279,9 +1348,23 @@ function renderReport(){if(!isAdmin())return;reportRows=buildReportRows();const 
    paymentMap[key].usd+=r.sale.usdEquivalent||0;
  });
  $("#paymentSummary").innerHTML=Object.entries(paymentMap).map(([k,v])=>`<div class="conv"><span class="muted">${esc(k)}</span><b>${fmt(v.usd)}</b><span class="tiny">${v.sales.size} vente(s) · ${fmt(usdToCdf(v.usd),"CDF")}</span></div>`).join("")||`<div class="muted">Aucune vente.</div>`;
- $("#reportTable").innerHTML=reportRows.map(r=>`<tr><td>${displayDate(r.sale.createdAt)}</td><td>${r.sale.receipt}</td><td>${esc(r.item.name)}</td><td>${r.item.qty}</td><td>${esc(r.sale.paymentMethod||"Espèces")}${r.sale.paymentRef?`<br><span class="tiny">${esc(r.sale.paymentRef)}</span>`:""}</td><td>${fmt(r.item.buy)}</td><td>${fmt(r.item.sell)}</td><td class="positive">${fmt(r.item.sell-r.item.buy)}</td><td>${fmt(r.cost)}</td><td>${fmt(r.saleTotal)}</td><td class="positive">${fmt(r.profit)}<br><span class="tiny">${fmt(usdToCdf(r.profit),"CDF")}</span></td><td>${esc(r.sale.sellerName)}</td><td>${esc(r.sale.buyerName||"—")}</td><td class="ownerAdminOnly"><button class="btn danger small" onclick="deleteReportItem('${r.sale.id}','${r.item.productId}')">Supprimer erreur</button></td></tr>`).join("")||`<tr><td colspan="12" class="muted">Aucun résultat.</td></tr>`;
- $("#reportFoot").innerHTML=`<tr><td colspan="3">TOTAUX</td><td>${qty}</td><td></td><td colspan="3"></td><td>${fmt(cost)}</td><td>${fmt(rev)}</td><td>${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td colspan="2"></td></tr>`;
+ $("#reportTable").innerHTML=reportRows.map(r=>`<tr><td>${displayDate(r.sale.createdAt)}</td><td>${r.sale.receipt}</td><td>${esc(r.item.name)}</td><td>${r.item.qty}</td><td>${esc(r.sale.paymentMethod||"Espèces")}${r.sale.paymentRef?`<br><span class="tiny">${esc(r.sale.paymentRef)}</span>`:""}</td><td class="profitOnly">${fmt(r.item.buy)}</td><td>${fmt(r.item.sell)}</td><td class="profitOnly positive">${fmt(r.item.sell-(Number(r.item.buy)||0))}</td><td class="profitOnly">${fmt(r.cost)}</td><td>${fmt(r.saleTotal)}</td><td class="profitOnly positive">${fmt(r.profit)}<br><span class="tiny">${fmt(usdToCdf(r.profit),"CDF")}</span></td><td>${esc(r.sale.sellerName)}</td><td>${esc(r.sale.buyerName||"—")}</td><td class="ownerAdminOnly"><button class="btn danger small" onclick="deleteReportItem('${r.sale.id}','${r.item.productId}')">Supprimer erreur</button></td></tr>`).join("")||`<tr><td colspan="14" class="muted">Aucun résultat.</td></tr>`;
+ $("#reportFoot").innerHTML=`<tr><td colspan="3">TOTAUX</td><td>${qty}</td><td></td><td class="profitOnly"></td><td></td><td class="profitOnly"></td><td class="profitOnly">${fmt(cost)}</td><td>${fmt(rev)}</td><td class="profitOnly">${fmt(profit)}<br><span class="tiny">${fmt(usdToCdf(profit),"CDF")}</span></td><td colspan="3"></td></tr>`;
 }
+function moneyUsd(t,value=t.amount){return t.currency==="CDF"?Number(value||0)/Number(t.rateUsed||db.rate):Number(value||0)}
+function moneyTypeLabel(type){return type==="deposit"?"Dépôt":type==="withdrawal"?"Retrait":"Envoi"}
+function renderMoney(){
+  if(!canViewMoney())return;const q=($("#moneySearch")?.value||"").toLowerCase(),type=$("#moneyTypeFilter")?.value||"",shops=selectedShopIds();
+  const rows=(db.moneyTransactions||[]).filter(t=>shops.includes(t.shopId)&&(!type||t.type===type)&&(!q||`${t.network} ${t.reference} ${t.customer} ${t.agentName}`.toLowerCase().includes(q))).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const volume=rows.reduce((n,t)=>n+moneyUsd(t),0),cash=rows.reduce((n,t)=>n+(t.type==="withdrawal"?-1:1)*moneyUsd(t),0),commission=rows.reduce((n,t)=>n+moneyUsd(t,t.fee),0);
+  $("#moneyCount").textContent=rows.length;$("#moneyVolume").textContent=fmt(volume);$("#moneyCash").textContent=fmt(cash);$("#moneyCommission").textContent=fmt(commission);
+  $("#moneyTable").innerHTML=rows.map(t=>`<tr><td>${displayDate(t.createdAt)}</td><td><span class="pill">${moneyTypeLabel(t.type)}</span></td><td>${esc(t.network)}</td><td>${esc(t.customer||"—")}${t.note?`<br><span class="tiny">${esc(t.note)}</span>`:""}</td><td>${esc(t.reference||"—")}</td><td>${fmt(t.amount,t.currency)}</td><td class="profitOnly">${fmt(t.fee||0,t.currency)}</td><td>${esc(t.agentName)}</td><td>${isTrueAdmin()?`<button class="btn danger small" onclick="deleteMoneyTransaction('${t.id}')">Supprimer</button>`:""}</td></tr>`).join("")||`<tr><td colspan="9" class="muted">Aucune transaction.</td></tr>`;
+  $("#moneyFoot").innerHTML=`<tr><td colspan="5">TOTAUX</td><td>${fmt(volume)}<br><span class="tiny">${fmt(usdToCdf(volume),"CDF")}</span></td><td class="profitOnly">${fmt(commission)}</td><td colspan="2"></td></tr>`
+}
+$("#moneyNetwork").innerHTML=MONEY_NETWORKS.map(n=>`<option>${esc(n)}</option>`).join("");
+$("#moneySearch").oninput=renderMoney;$("#moneyTypeFilter").onchange=renderMoney;
+$("#saveMoneyBtn").onclick=()=>{if(!hasPermission("money.manage"))return alert("Autorisation Mobile Money requise.");const amount=Number($("#moneyAmount").value),fee=Number($("#moneyFee").value)||0;if(!(amount>0)||fee<0)return alert("Montant ou commission invalide.");const u=activeUser(),t={id:uid("mm"),type:$("#moneyType").value,network:$("#moneyNetwork").value,amount,currency:$("#moneyCurrency").value,fee,customer:$("#moneyCustomer").value.trim(),reference:$("#moneyReference").value.trim(),note:$("#moneyNote").value.trim(),shopId:currentShop==="all"?(u?.shops?.[0]||"main"):currentShop,agentId:u?.id||"",agentName:u?.name||"Utilisateur",rateUsed:db.rate,createdAt:new Date().toISOString()};db.moneyTransactions.push(t);queueSync("money.create",{transactionId:t.id});save();["moneyAmount","moneyCustomer","moneyReference","moneyNote"].forEach(id=>$("#"+id).value="");$("#moneyFee").value=0;render()};
+window.deleteMoneyTransaction=id=>{if(!isTrueAdmin())return;const t=db.moneyTransactions.find(x=>x.id===id);if(!t||!confirm(`Supprimer cette transaction ${t.network} ?`))return;db.moneyTransactions=db.moneyTransactions.filter(x=>x.id!==id);queueSync("money.delete",{transactionId:id});save();render()};
 function renderSettings(){
   if(!isTrueAdmin())return;
   $("#adminName").value=db.adminProfile.name||"";
@@ -1298,9 +1381,10 @@ function renderSettings(){
 
 function allowedPage(id){
   if(isVisitor()) return ["storefront","visitorChat"].includes(id) ? id : "storefront";
-  const known=["home","sales","products","staff","shops","reports","orders","settings","receipt"];
+  const known=["home","sales","products","staff","shops","reports","money","orders","settings","receipt"];
   if(!known.includes(id)) return "home";
   if(id==="reports"&&!hasPermission("reports.view")) return "home";
+  if(id==="money"&&!canViewMoney()) return "home";
   if(id==="staff"&&!hasPermission("staff.manage"))return "home";
   if(id==="shops"&&!hasPermission("shops.manage"))return "home";
   if(id==="settings"&&!isTrueAdmin()) return "home";
@@ -1359,6 +1443,9 @@ $("#convertBtn").onclick=()=>{const u=Number($("#quickUsd").value),c=Number($("#
 $("#periods").onclick=e=>{if(e.target.tagName!=="BUTTON")return;$$("#periods button").forEach(x=>x.classList.remove("active"));e.target.classList.add("active");db.activePeriod=e.target.dataset.period;$("#customPeriod").style.display=db.activePeriod==="custom"?"flex":"none";save();renderDashboard()};
 
 function openModal(id){$("#"+id).classList.add("open")}function closeModals(){$$(".modal").forEach(m=>m.classList.remove("open"))}$$("[data-close]").forEach(b=>b.onclick=closeModals);
+function openImage(url,title){if(!url)return;$("#imageModalView").src=url;$("#imageModalView").alt=title||"Image de l’article";$("#imageModalTitle").textContent=title||"Image de l’article";openModal("imageModal")}
+window.openProductImage=id=>{const p=db.products.find(x=>x.id===id);if(p)openImage(p.photo,p.name)};
+window.openSaleItemImage=(saleId,productId)=>{const s=db.sales.find(x=>x.id===saleId),i=s?.items.find(x=>x.productId===productId),p=db.products.find(x=>x.id===productId);openImage(i?.photo||p?.photo,i?.name||p?.name)};
 $("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale();$("#addProductBtn").onclick=()=>{
   editingProductId=null;
   $("#productModalTitle").textContent="Ajouter un article";
@@ -1377,13 +1464,48 @@ $("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale()
   openModal("productModal")
 };$("#addShopBtn").onclick=()=>openModal("shopModal");$("#addSellerBtn").onclick=()=>{renderSellerChecks();openModal("sellerModal")};
 
-function saleProducts(){return db.products.filter(p=>selectedShopIds().includes(p.shopId)&&p.stock>0)}
-function openSale(id=null){editingSaleId=id;$("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");$("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";if(id){const s=db.sales.find(x=>x.id===id),i=s.items[0];$("#buyerName").value=s.buyerName;$("#buyerPhone").value=s.buyerPhone;$("#saleProduct").value=i.productId;$("#saleQty").value=i.qty;$("#saleCurrency").value=s.currency;$("#salePaymentMethod").value=s.paymentMethod||"Espèces";$("#salePaymentRef").value=s.paymentRef||"";$("#salePaid").value=s.paidTotal}else{$("#buyerName").value="";$("#buyerPhone").value="";$("#saleQty").value=1;$("#saleCurrency").value="USD";$("#salePaymentMethod").value="Espèces";$("#salePaymentRef").value="";$("#salePaid").value=""}updateSaleTotal();openModal("saleModal")}
-function updateSaleTotal(){const p=db.products.find(x=>x.id===$("#saleProduct").value),q=Math.max(1,Number($("#saleQty").value)||1),c=$("#saleCurrency").value;if(!p)return;$("#saleUnitUsd").value=fmt(p.sell);$("#saleUnitCdf").value=fmt(usdToCdf(p.sell),"CDF");$("#saleTotalUsd").value=fmt(p.sell*q);$("#saleTotalCdf").value=fmt(usdToCdf(p.sell*q),"CDF");$("#saleProfitPreview").value=`${fmt((p.sell-p.buy)*q)} / ${fmt(usdToCdf((p.sell-p.buy)*q),"CDF")}`;if(!editingSaleId)$("#salePaid").value=c==="USD"?(p.sell*q).toFixed(2):Math.round(usdToCdf(p.sell*q))}
-$("#saleProduct").onchange=updateSaleTotal;$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
-$("#saveSaleBtn").onclick=()=>{const p=db.products.find(x=>x.id===$("#saleProduct").value),qty=Math.max(1,Number($("#saleQty").value)||1),cur=$("#saleCurrency").value,paid=Number($("#salePaid").value);if(!p)return alert("Aucun article.");if(!paid)return alert("Montant payé requis.");if(editingSaleId){const s=db.sales.find(x=>x.id===editingSaleId),old=s.items[0],op=db.products.find(x=>x.id===old.productId);if(op)op.stock+=old.qty;if(p.stock<qty){if(op)op.stock-=old.qty;return alert("Stock insuffisant")}p.stock-=qty;s.buyerName=$("#buyerName").value.trim();s.buyerPhone=$("#buyerPhone").value.trim();s.currency=cur;s.paymentMethod=$("#salePaymentMethod").value;s.paymentRef=$("#salePaymentRef").value.trim();s.paidTotal=paid;s.rateUsed=db.rate;s.usdEquivalent=cur==="USD"?paid:paid/db.rate;s.items=[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}];s.updatedAt=new Date().toISOString();s.status="Corrigée";delete s.pendingRequest;queueSync("sale.update",{saleId:s.id});notify("Vente corrigée",`${esc(s.receipt)} corrigée.`);currentReceiptSaleId=s.id}else{if(p.stock<qty)return alert("Stock insuffisant");p.stock-=qty;const u=activeUser(),s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),shopId:p.shopId,buyerName:$("#buyerName").value.trim(),buyerPhone:$("#buyerPhone").value.trim(),sellerId:u?.id||"",sellerName:u?.name||"Utilisateur",currency:cur,paymentMethod:$("#salePaymentMethod").value,paymentRef:$("#salePaymentRef").value.trim(),rateUsed:db.rate,paidTotal:paid,usdEquivalent:cur==="USD"?paid:paid/db.rate,status:"Validée",items:[{productId:p.id,name:p.name,qty,buy:p.buy,sell:p.sell}]};db.sales.push(s);currentReceiptSaleId=s.id;queueSync("sale.create",{saleId:s.id});notify("Nouvelle vente",`${esc(s.receipt)} · ${fmt(s.paidTotal,s.currency)}`)}save();editingSaleId=null;closeModals();render();showReceipt(currentReceiptSaleId)};
+function saleProducts(){const oldIds=new Set((db.sales.find(s=>s.id===editingSaleId)?.items||[]).map(i=>i.productId));return db.products.filter(p=>selectedShopIds().includes(p.shopId)&&(p.stock>0||oldIds.has(p.id)))}
+function renderSaleDraft(){
+  $("#saleItemsEditor").innerHTML=saleDraftItems.map(i=>`<div class="saleDraftRow"><div><b>${esc(i.name)}</b><br><span class="tiny">${i.qty} × ${fmt(i.sell)} = ${fmt(i.qty*i.sell)}</span></div><button type="button" class="btn danger small" onclick="removeSaleDraftItem('${i.productId}')">Retirer</button></div>`).join("")||`<div class="muted">Ajoutez un ou plusieurs articles.</div>`;
+  updateSaleTotal()
+}
+function addSelectedSaleItem(silent=false){
+  const p=db.products.find(x=>x.id===$("#saleProduct").value),qty=Number($("#saleQty").value);
+  if(!p||!Number.isInteger(qty)||qty<1){if(!silent)alert("Choisissez un article et une quantité valide.");return false}
+  if(saleDraftItems.length&&db.products.find(x=>x.id===saleDraftItems[0].productId)?.shopId!==p.shopId){if(!silent)alert("Un même reçu ne peut contenir que les articles d’une seule boutique.");return false}
+  const oldQty=(db.sales.find(s=>s.id===editingSaleId)?.items||[]).filter(i=>i.productId===p.id).reduce((n,i)=>n+i.qty,0);
+  const current=saleDraftItems.find(i=>i.productId===p.id),total=(current?.qty||0)+qty;
+  if(total>p.stock+oldQty){if(!silent)alert(`Stock insuffisant pour ${p.name}.`);return false}
+  const item={productId:p.id,name:p.name,qty:total,buy:Number(p.buy)||0,sell:Number(p.sell)||0,photo:p.photo||"",details:p.details||""};
+  if(current)Object.assign(current,item);else saleDraftItems.push(item);
+  $("#saleQty").value=1;renderSaleDraft();return true
+}
+window.removeSaleDraftItem=id=>{saleDraftItems=saleDraftItems.filter(i=>i.productId!==id);renderSaleDraft()};
+function openSale(id=null){
+  editingSaleId=id;const s=id?db.sales.find(x=>x.id===id):null;saleDraftItems=clone(s?.items||[]);
+  $("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");
+  $("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";$("#buyerName").value=s?.buyerName||"";$("#buyerPhone").value=s?.buyerPhone||"";$("#saleQty").value=1;$("#saleCurrency").value=s?.currency||"USD";$("#salePaymentMethod").value=s?.paymentMethod||"Espèces";$("#salePaymentRef").value=s?.paymentRef||"";$("#salePaid").value=s?.paidTotal||"";renderSaleDraft();openModal("saleModal")
+}
+function updateSaleTotal(){
+  const p=db.products.find(x=>x.id===$("#saleProduct").value),previewQty=Math.max(1,Number($("#saleQty").value)||1),items=saleDraftItems.length?saleDraftItems:p?[{...p,qty:previewQty}]:[],usd=items.reduce((n,i)=>n+i.sell*i.qty,0),profit=items.reduce((n,i)=>n+(i.sell-(Number(i.buy)||0))*i.qty,0),c=$("#saleCurrency").value;
+  if(p){$("#saleUnitUsd").value=fmt(p.sell);$("#saleUnitCdf").value=fmt(usdToCdf(p.sell),"CDF")}
+  $("#saleTotalUsd").value=fmt(usd);$("#saleTotalCdf").value=fmt(usdToCdf(usd),"CDF");$("#saleProfitPreview").value=`${fmt(profit)} / ${fmt(usdToCdf(profit),"CDF")}`;
+  if(!editingSaleId)$("#salePaid").value=c==="USD"?usd.toFixed(2):Math.round(usdToCdf(usd))
+}
+$("#addSaleItemBtn").onclick=()=>addSelectedSaleItem();$("#saleProduct").onchange=updateSaleTotal;$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
+$("#saveSaleBtn").onclick=()=>{
+  if(!saleDraftItems.length&&!addSelectedSaleItem(true))return alert("Ajoutez au moins un article.");
+  const cur=$("#saleCurrency").value,paid=Number($("#salePaid").value),old=editingSaleId?db.sales.find(x=>x.id===editingSaleId):null;
+  if(!paid||!saleDraftItems.length)return alert("Montant payé et articles requis.");
+  for(const i of saleDraftItems){const p=db.products.find(x=>x.id===i.productId),oldQty=(old?.items||[]).filter(x=>x.productId===i.productId).reduce((n,x)=>n+x.qty,0);if(!p||i.qty>p.stock+oldQty)return alert(`Stock insuffisant pour ${i.name}.`)}
+  (old?.items||[]).forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});saleDraftItems.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);p.stock-=i.qty});
+  const common={shopId:db.products.find(p=>p.id===saleDraftItems[0].productId).shopId,buyerName:$("#buyerName").value.trim(),buyerPhone:$("#buyerPhone").value.trim(),currency:cur,paymentMethod:$("#salePaymentMethod").value,paymentRef:$("#salePaymentRef").value.trim(),rateUsed:db.rate,paidTotal:paid,usdEquivalent:cur==="USD"?paid:paid/db.rate,items:clone(saleDraftItems),updatedAt:new Date().toISOString()};
+  if(old){Object.assign(old,common,{status:"Corrigée"});delete old.pendingRequest;currentReceiptSaleId=old.id;queueSync("sale.update",{saleId:old.id});notify("Vente corrigée",`${old.receipt} corrigée.`)}else{const u=activeUser(),s={id:uid("s"),receipt:monthReceipt(),ref:shortRef(),createdAt:new Date().toISOString(),sellerId:u?.id||"",sellerName:u?.name||"Utilisateur",status:"Validée",...common};db.sales.push(s);currentReceiptSaleId=s.id;queueSync("sale.create",{saleId:s.id});notify("Nouvelle vente",`${s.receipt} · ${fmt(s.paidTotal,s.currency)}`)}
+  save();editingSaleId=null;saleDraftItems=[];closeModals();render();showReceipt(currentReceiptSaleId)
+};
 window.editSale=id=>{const s=db.sales.find(x=>x.id===id);if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"edit");openSale(id)};
 window.cancelSale=id=>{const s=db.sales.find(x=>x.id===id);if(!s||s.status==="Annulée")return;if(!isAdmin()&&saleAgeMin(s)>db.shopSettings.correctionWindowMin)return requestApproval(id,"cancel");if(!confirm(`Annuler ${esc(s.receipt)} ?`))return;s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";queueSync("sale.cancel",{saleId:s.id});notify("Vente annulée",`${esc(s.receipt)} annulée.`);save();render()};
+window.deleteCancelledSale=id=>{const s=db.sales.find(x=>x.id===id);if(!isTrueAdmin()||!s||s.status!=="Annulée")return;if(!confirm(`Supprimer définitivement la vente annulée ${s.receipt} ?`))return;db.sales=db.sales.filter(x=>x.id!==id);queueSync("sale.delete_cancelled",{saleId:id});notify("Vente annulée supprimée",`${s.receipt} a été retirée de l’historique.`);save();render()};
 window.requestApproval=(id,type)=>{approvalContext={id,type};$("#approvalReason").value="";openModal("approvalModal")};
 $("#sendApprovalBtn").onclick=()=>{const s=db.sales.find(x=>x.id===approvalContext?.id);if(!s)return;s.pendingRequest={type:approvalContext.type,reason:$("#approvalReason").value.trim(),requestedAt:new Date().toISOString()};notify("Approbation requise",`${esc(s.receipt)} : demande de ${approvalContext.type==="cancel"?"annulation":"correction"}.`);save();approvalContext=null;closeModals();render()};
 window.approveRequest=id=>{const s=db.sales.find(x=>x.id===id);if(!s?.pendingRequest)return;if(s.pendingRequest.type==="cancel"){s.items.forEach(i=>{const p=db.products.find(x=>x.id===i.productId);if(p)p.stock+=i.qty});s.status="Annulée";delete s.pendingRequest;notify("Demande approuvée",`${esc(s.receipt)} annulée.`);save();render()}else{delete s.pendingRequest;save();render();openSale(id)}};
@@ -1797,7 +1919,7 @@ function renderStorefront(){
   const q=($("#storeSearch")?.value||"").toLowerCase(),cat=$("#storeCategory")?.value||"";
   const items=db.products.filter(p=>p.shopId==="main"&&Number(p.stock)>0&&p.visibleToVisitors!==false&&(!q||`${p.name} ${p.category} ${p.details}`.toLowerCase().includes(q))&&(!cat||p.category===cat));
   $("#storeGrid").innerHTML=items.map(p=>`<div class="storeitem">
-    ${p.photo?`<img src="${esc(p.photo)}" alt="${esc(p.name)}">`:`<div class="storeph">📦</div>`}
+    ${p.photo?`<img class="zoomable" src="${esc(p.photo)}" alt="${esc(p.name)}" onclick="openProductImage('${p.id}')">`:`<div class="storeph">📦</div>`}
     <h3>${esc(p.name)}</h3><div class="tiny">${esc(p.category)} · stock ${p.stock}</div>
     <div class="price">${fmt(p.sell)} <span class="tiny">/ ${fmt(usdToCdf(p.sell),"CDF")}</span></div>
     <p class="muted">${esc(p.details||"")}</p>

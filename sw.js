@@ -1,4 +1,4 @@
-const CACHE="mmedpren-v36-fast-sync-ad-crud";
+const CACHE="mmedpren-v37-sales-money-media";
 const CORE=["./index.html","./sync-core.js","./logo.png","./manifest.webmanifest"];
 self.addEventListener("install",event=>{
   event.waitUntil((async()=>{

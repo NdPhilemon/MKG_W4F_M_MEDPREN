@@ -37,6 +37,7 @@ function defaults(){
     products:[],
     ads:[],
     sales:[],
+    moneyTransactions:[],
     notifications:[],
     updatedAt:new Date().toISOString()
   }
@@ -47,6 +48,7 @@ function normalizeRoot(raw={}){
   if(!r.shops.some(s=>s?.id==="main"))r.shops.unshift(mainShop());
 
   r.users=arr(r.users);
+  r.moneyTransactions=arr(r.moneyTransactions);
   r.users=r.users.map(u=>u.suspendedUntil&&new Date(u.suspendedUntil)<=new Date()?{...u,status:'Actif',suspendedUntil:null}:u);
   let adminUser=r.users.find(u=>u?.isPrimary)||r.users.find(u=>String(u?.email||"").toLowerCase()===ADMIN_EMAIL);
   if(!adminUser){
@@ -95,6 +97,9 @@ async function login(body,req){
 }
 function publicProduct(p){const {buy,buyCurrency,...safe}=p;return safe}
 function publicOrder(o){return {...o,items:arr(o.items).map(({buy,...item})=>item)}}
+function privateProduct(p,a){if(can(a,'reports.profit'))return p;const {buy,buyCurrency,...safe}=p;return safe}
+function privateSale(s,a){return can(a,'reports.profit')?s:{...s,items:arr(s.items).map(({buy,...item})=>item)}}
+function privateMoney(t,a){if(can(a,'reports.profit'))return t;const {fee,...safe}=t;return safe}
 async function stateFor(a,sid){
   const r=a?.root||await readRoot(),{ORDERS}=refs();
   const rows=a?await ORDERS.get():sid?await ORDERS.where('visitorSessionId','==',sid).get():{docs:[]};
@@ -105,8 +110,9 @@ async function stateFor(a,sid){
   return {revision:r.revision,state:{rate:r.rate,mainCurrency:r.mainCurrency,hideMoney:r.hideMoney,shopSettings:r.shopSettings,
     adminProfile:a.role==='admin'?r.adminProfile:{},shops:r.shops.filter(s=>inShop(a,s.id)),
     users:a.role==='admin'?r.users.map(cleanUser):[{...cleanUser(a.user),accessCode:null}],
-    products:arr(r.products).filter(p=>inShop(a,p.shopId)),ads:arr(r.ads),
-    sales:arr(r.sales).filter(s=>inShop(a,s.shopId)&&(can(a,'sales.all')||s.sellerId===a.user.id)),
+    products:arr(r.products).filter(p=>inShop(a,p.shopId)).map(p=>privateProduct(p,a)),ads:arr(r.ads),
+    sales:arr(r.sales).filter(s=>inShop(a,s.shopId)&&(can(a,'sales.all')||s.sellerId===a.user.id)).map(s=>privateSale(s,a)),
+    moneyTransactions:(can(a,'money.view')||can(a,'money.manage'))?arr(r.moneyTransactions).filter(t=>inShop(a,t.shopId)).map(t=>privateMoney(t,a)):[],
     orders:orders.filter(o=>inShop(a,o.shopId)&&(a.role==='admin'||(o.status==='waiting'&&can(a,'orders.waiting'))||(o.claimedById===a.user.id&&can(a,'orders.own')))),
     notifications:a.role==='admin'?arr(r.notifications):[]}};
 }
@@ -118,9 +124,17 @@ function validateChanges(changes,a,current){
   const stock=new Map();
   for(const c of changes.filter(c=>c.key==='sales')){
     const old=arr(current.sales).find(x=>x.id===c.id),next=c.after;
+    if(old&&c.before&&!can(a,'reports.profit')){
+      const visible=s=>({...s,items:arr(s.items).map(({buy,...item})=>item)});
+      if(JSON.stringify(visible(old))!==JSON.stringify(c.before)&&JSON.stringify(visible(old))!==JSON.stringify(next))throw error(409,'Vente modifiée à distance','SYNC_CONFLICT');
+      c.before=old;
+    }
     if(next&&(!Number.isFinite(next.paidTotal)||next.paidTotal<=0||!['USD','CDF'].includes(next.currency)||!arr(next.items).length))throw error(400,'Vente invalide');
     if(next)for(const item of next.items){
-      if(!arr(current.products).some(p=>p.id===item.productId&&inShop(a,p.shopId)))throw error(400,'Article de vente invalide');
+      const product=arr(current.products).find(p=>p.id===item.productId&&inShop(a,p.shopId));
+      if(!product)throw error(400,'Article de vente invalide');
+      const previous=arr(old?.items).find(i=>i.productId===item.productId);
+      item.buy=Number(previous?.buy??product.buy);item.sell=Number(item.sell??previous?.sell??product.sell);item.name=String(item.name||product.name);item.photo=item.photo||product.photo||'';item.details=item.details||product.details||'';
       if(!Number.isFinite(item.buy)||item.buy<0||!Number.isFinite(item.sell)||item.sell<0)throw error(400,'Prix invalide');
     }
     if(!can(a,'sales.create')||!inShop(a,(next||old)?.shopId))throw error(403,'Vente non autorisée');
@@ -141,6 +155,13 @@ function validateChanges(changes,a,current){
     if(MkgSync.lists.includes(c.key)&&!safeId(c.id))throw error(400,'Identifiant invalide');
     if(c.after?.id&&c.after.id!==c.id)throw error(400,'Identifiant incohérent');
     if(c.key==='orders')continue;
+    if(c.key==='moneyTransactions'){
+      const old=arr(current.moneyTransactions).find(t=>t.id===c.id),next=c.after;
+      if(!can(a,'money.manage')||!inShop(a,(next||old)?.shopId))throw error(403,'Transaction Mobile Money non autorisée');
+      if(next&&(!['deposit','send','withdrawal'].includes(next.type)||!['USD','CDF'].includes(next.currency)||!Number.isFinite(next.amount)||next.amount<=0||!Number.isFinite(next.fee)||next.fee<0||typeof next.network!=='string'||next.network.length>80))throw error(400,'Transaction Mobile Money invalide');
+      if(a.role!=='admin'&&((old&&old.agentId!==a.user.id)||(!old&&next?.agentId!==a.user.id)||!next))throw error(403,'Transaction Mobile Money non autorisée');
+      continue;
+    }
     if(c.key==='users'){
       const primary=arr(current.users).find(u=>u.isPrimary);
       if(primary?.id===c.id&&(!c.after||c.after.role!=='admin'||!c.after.isPrimary))throw error(403,'Compte principal protégé');
@@ -148,6 +169,7 @@ function validateChanges(changes,a,current){
     }
     if(c.key==='products'){
       const old=arr(current.products).find(p=>p.id===c.id),next=c.after;
+      if(old&&next&&!can(a,'reports.profit')){next.buy=old.buy;next.buyCurrency=old.buyCurrency}
       if(next&&(!Number.isFinite(next.stock)||next.stock<0||!Number.isFinite(next.buy)||next.buy<0||!Number.isFinite(next.sell)||next.sell<0))throw error(400,'Stock ou prix invalide');
       if(!inShop(a,(old||next)?.shopId)||(next&&!inShop(a,next.shopId)))throw error(403,'Boutique non autorisée');
       if(!can(a,'products.edit')){
@@ -156,7 +178,7 @@ function validateChanges(changes,a,current){
       }
       continue;
     }
-    if(a.role!=='admin'&&!['sales','notifications'].includes(c.key))throw error(403,'Action réservée à un administrateur');
+    if(a.role!=='admin'&&!['sales','notifications','moneyTransactions'].includes(c.key))throw error(403,'Action réservée à un administrateur');
   }
   if(!can(a,'products.edit'))for(const [id,delta] of stock){
     const c=changes.find(c=>c.key==='products'&&c.id===id);

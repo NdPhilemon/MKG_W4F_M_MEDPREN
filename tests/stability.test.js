@@ -29,6 +29,7 @@ Object.defineProperty(admin,'firestore',{value:()=>fakeDb});
 const {default:handler}=await import('../api/sync.js');
 const {default:health}=await import('../api/health.js');
 const {default:upload}=await import('../api/upload.js');
+const {decodeImage}=await import('../lib/cloudinary.js');
 const {signSession}=await import('../lib/session.js');
 async function request(url='/api/sync',options={}){
   const parsed=new URL(url,'https://app.test'),req={method:options.method||'GET',headers:options.headers||{},query:Object.fromEntries(parsed.searchParams),body:options.body};
@@ -186,6 +187,38 @@ test('staff sales decrement stock, concurrent sales merge, manager edits and ser
   root().users.find(u=>u.id==='seller-a').status='Suspendu';
   const revoked=await request('/api/sync?scope=private',{headers:{'x-sync-token':a.read('db.syncAuth.token')}});
   assert.equal(revoked.status,401);assert.equal(revoked.data.code,'ACCOUNT_INVALID');
+});
+
+test('multi-product sale uses one receipt and Admin can delete it after cancellation',async()=>{
+  documents.clear();const owner=browser();await owner.login();
+  owner.read(`db.products.push(${JSON.stringify(product('p-one'))},${JSON.stringify({...product('p-two'),name:'Deuxième',stock:4,buy:1,sell:3})});queueSync('products.seed');save()`);await owner.read('syncPending({silent:true})');
+  owner.read('openSale()');
+  owner.w.document.querySelector('#saleProduct').value='p-one';owner.w.document.querySelector('#saleQty').value='2';owner.w.document.querySelector('#addSaleItemBtn').onclick();
+  owner.w.document.querySelector('#saleProduct').value='p-two';owner.w.document.querySelector('#saleQty').value='1';owner.w.document.querySelector('#addSaleItemBtn').onclick();
+  owner.w.document.querySelector('#salePaid').value='13';owner.w.document.querySelector('#saveSaleBtn').onclick();await owner.read('syncPending({silent:true})');
+  assert.equal(root().sales.length,1);assert.equal(root().sales[0].items.length,2);assert.equal(root().products.find(p=>p.id==='p-one').stock,8);assert.equal(root().products.find(p=>p.id==='p-two').stock,3);
+  const saleId=root().sales[0].id;owner.w.cancelSale(saleId);await owner.read('syncPending({silent:true})');assert.equal(root().sales[0].status,'Annulée');
+  owner.w.deleteCancelledSale(saleId);await owner.read('syncPending({silent:true})');assert.equal(root().sales.length,0);assert.equal(root().products.find(p=>p.id==='p-one').stock,10);assert.equal(root().products.find(p=>p.id==='p-two').stock,4);
+});
+
+test('profit permission is server-enforced and Mobile Money transactions synchronize',async()=>{
+  documents.clear();const owner=browser();await owner.login();root().products.push(product());
+  root().sales.push({id:'sale-secret',receipt:'R-1',shopId:'main',sellerId:'reporter',sellerName:'Reporter',buyerName:'Client',currency:'USD',paidTotal:5,usdEquivalent:5,status:'Validée',createdAt:new Date().toISOString(),items:[{productId:'p-one',name:'Article',qty:1,buy:2,sell:5}]});
+  root().users.push({id:'reporter',name:'Reporter',email:'reporter@example.test',accessCode:'123456',role:'seller',shops:['main'],permissions:['sales.create','sales.all','products.view','reports.view','money.view','money.manage'],status:'Actif'});
+  const staff=browser();await staff.login('staff','reporter@example.test','123456');
+  assert.equal(staff.read('db.products[0].buy'),undefined);assert.equal(staff.read('db.sales[0].items[0].buy'),undefined);assert.equal(staff.read('canSeeProfit()'),false);
+  staff.read('go("reports")');assert.equal(staff.w.document.querySelector('.panel.active').id,'reports');assert.equal(staff.w.document.querySelector('#reportProfit').closest('.profitOnly').style.display,'none');
+  staff.read('go("money")');staff.w.document.querySelector('#moneyAmount').value='100';staff.w.document.querySelector('#moneyCustomer').value='0990000000';staff.w.document.querySelector('#moneyReference').value='TX-1';staff.w.document.querySelector('#saveMoneyBtn').onclick();await staff.read('syncPending({silent:true})');
+  assert.equal(root().moneyTransactions.length,1);assert.equal(root().moneyTransactions[0].agentId,'reporter');
+  const second=browser();await second.login('staff','reporter@example.test','123456');assert.equal(second.read('db.moneyTransactions.length'),1);assert.equal(second.read('db.moneyTransactions[0].fee'),undefined);
+  await owner.read('pullRemote({silent:true})');assert.equal(owner.read('db.moneyTransactions[0].fee'),0);
+});
+
+test('shared links expose the public logo preview and broad photo input',()=>{
+  assert.match(html,/property="og:image" content="https:\/\/mkgw4fmmedpren\.vercel\.app\/logo\.png"/);
+  assert.match(html,/id="productPhoto" type="file" accept="image\/\*"/);
+  const heic=`data:image/heic;base64,${Buffer.alloc(12,1).toString('base64')}`;
+  assert.equal(decodeImage(heic).mime,'image/heic');
 });
 
 test('expired and forged tokens, request without credentials, legacy password cleanup',async()=>{
