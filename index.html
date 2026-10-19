@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:12px 9px;border-bottom:1
 tfoot td{font-weight:900;background:var(--soft);color:var(--text)}
 .pill{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--soft);color:var(--orangeDark);font-size:11px;font-weight:800}.pill.red{color:var(--danger)}.pill.green{color:var(--ok)}.pill.warn{color:var(--warn)}
 .product{display:flex;align-items:center;gap:10px}.thumb{width:48px;height:48px;border-radius:13px;border:1px solid var(--line);background:var(--soft);object-fit:cover;display:grid;place-items:center}
-.zoomable{cursor:zoom-in}.saleItems{display:grid;gap:7px;min-width:210px}.saleItem{display:flex;align-items:center;gap:8px}.saleItem .thumb{width:42px;height:42px}.saleItem small{display:block;max-width:220px}.saleDraft{display:grid;gap:8px;margin-top:8px}.saleDraftRow{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:13px}.saleDraftRow>div{flex:1}.lightbox{align-items:center!important}.lightbox .sheet{width:min(94vw,980px);height:min(90vh,820px);border-radius:22px;padding:12px;display:flex;flex-direction:column}.lightbox img{width:100%;height:calc(90vh - 90px);object-fit:contain;border-radius:15px;background:#111}.moneyForm{margin-top:14px}
+.zoomable{cursor:zoom-in}.saleItems{display:grid;gap:7px;min-width:210px}.saleItem{display:flex;align-items:center;gap:8px}.saleItem .thumb{width:42px;height:42px}.saleItem small{display:block;max-width:220px}.saleDraft{display:grid;gap:8px;margin-top:8px}.saleDraftRow{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:13px}.saleDraftRow>div{flex:1}.salePicker{display:grid;gap:7px;max-height:260px;overflow:auto;padding:3px}.saleChoice{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:14px;padding:8px}.saleChoice.active{border:2px solid var(--orange);background:var(--soft)}.saleChoice .thumb{flex:0 0 48px}.saleChoiceInfo{min-width:0;flex:1}.saleChoiceInfo b,.saleChoiceInfo small{display:block}.saleChoiceInfo small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lightbox{align-items:center!important}.lightbox .sheet{width:min(94vw,980px);height:min(90vh,820px);border-radius:22px;padding:12px;display:flex;flex-direction:column}.lightbox img{width:100%;height:calc(90vh - 90px);object-fit:contain;border-radius:15px;background:#111}.moneyForm{margin-top:14px}
 .shopgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .notifs{position:fixed;right:14px;top:68px;z-index:70;width:min(410px,94vw);max-height:72vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:none}.notifs.open{display:block}.notif{padding:14px 16px;border-bottom:1px solid var(--line)}.notif:last-child{border:0}.notif small{color:var(--muted)}
 .bottom{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--nav);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));padding:7px 7px calc(7px + env(safe-area-inset-bottom))}
@@ -506,7 +506,7 @@ body.internal-mode .bottom .nav{min-width:76px}
   <div class="formgrid">
     <div class="field"><label>Acheteur (facultatif)</label><input id="buyerName"></div>
     <div class="field"><label>Téléphone / WhatsApp (facultatif)</label><input id="buyerPhone"></div>
-    <div class="field"><label>Article</label><select id="saleProduct"></select></div>
+    <div class="field full"><label>Choisir l’article</label><select id="saleProduct" hidden aria-hidden="true"></select><div id="saleProductPicker" class="salePicker"></div></div>
     <div class="field"><label>Quantité</label><input id="saleQty" type="number" min="1" value="1"></div>
     <div class="field full"><button type="button" class="btn alt" id="addSaleItemBtn">＋ Ajouter cet article à la vente</button><div id="saleItemsEditor" class="saleDraft"></div></div>
     <div class="field"><label>Devise payée</label><select id="saleCurrency"><option>USD</option><option>CDF</option></select></div>
@@ -848,11 +848,28 @@ async function uploadMediaIfNeeded(dataUrl,folder="products"){
   if(isVisitor()||(folder==="ads"?!isTrueAdmin():!hasPermission("products.edit")))throw new Error("Envoi d’image non autorisé.");
   if(mediaBytes(dataUrl)>3*1024*1024)throw Object.assign(new Error("Image trop volumineuse : choisissez une image plus petite."),{status:413});
   const epoch=sessionEpoch;
-  const j=await apiJson("/api/upload",{method:"POST",signal:AbortSignal.timeout(35000),headers:privateHeaders(),body:JSON.stringify({dataUrl,folder})});
+  let signed;
+  try{signed=await apiJson("/api/upload",{method:"POST",signal:AbortSignal.timeout(12000),headers:privateHeaders(),body:JSON.stringify({action:"sign",folder,uploadId:crypto.randomUUID()})})}
+  catch(e){throw new Error(e.name==="TimeoutError"||e.name==="AbortError"?"La préparation de l’image a dépassé le délai. Vérifiez la connexion puis réessayez.":e.message)}
+  let endpoint;try{endpoint=new URL(signed.uploadUrl)}catch{}
+  if(!signed.ok||endpoint?.protocol!=="https:"||endpoint.hostname!=="api.cloudinary.com")throw new Error("Le stockage d’images n’a pas pu être préparé.");
+  const form=new FormData();Object.entries(signed.params||{}).forEach(([key,value])=>form.set(key,value));
+  form.set("api_key",signed.apiKey);form.set("signature",signed.signature);form.set("file",dataUrlBlob(dataUrl),"image");
+  let response,j;
+  try{response=await fetch(endpoint.href,{method:"POST",body:form,signal:AbortSignal.timeout(12000)});j=await response.json().catch(()=>({}))}
+  catch(e){throw new Error(e.name==="TimeoutError"||e.name==="AbortError"?"L’envoi de l’image a dépassé le délai. Vérifiez la connexion puis réessayez.":"Cloudinary est temporairement inaccessible.")}
+  if(!response.ok)throw Object.assign(new Error(response.status===413?"Image trop volumineuse.":response.status===429?"Limite d’envoi atteinte. Réessayez plus tard.":"Cloudinary a refusé cette image."),{status:response.status});
   if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi de l’image.");
-  let url;try{url=new URL(j.url)}catch{}
-  if(!j.ok||url?.protocol!=="https:"||url.hostname!=="res.cloudinary.com")throw new Error("Le stockage n’a pas confirmé une URL Cloudinary valide.");
+  let url;try{url=new URL(j.secure_url)}catch{}
+  if(url?.protocol!=="https:"||url.hostname!=="res.cloudinary.com"||j.public_id!==signed.params?.public_id)throw new Error("Le stockage n’a pas confirmé une URL Cloudinary valide.");
+  url.pathname=url.pathname.replace("/image/upload/","/image/upload/f_auto,q_auto,c_limit,w_1600/");
   return url.href
+}
+function dataUrlBlob(dataUrl){
+  const [header,encoded]=String(dataUrl).split(","),mime=/^data:([^;]+);base64$/i.exec(header)?.[1];
+  if(!mime||!encoded)throw new Error("Image encodée invalide.");
+  const raw=atob(encoded),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  return new Blob([bytes],{type:mime})
 }
 async function normalizeMediaBeforeSync(){
   for(const [rows,field,folder] of [[db.products,"photo","products"],[db.ads,"image","ads"]]){
@@ -958,7 +975,7 @@ window.addEventListener("offline",()=>{renderNetwork();renderSync()});
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&navigator.onLine)checkRemoteRevision()});
 function uid(p="id"){return p+"-"+crypto.randomUUID()}
 
-async function compressImageFile(file,maxSide=1200,quality=.78){
+async function compressImageFile(file,maxSide=1000,quality=.74){
   if(!file)return "";
   const extension=(file.name.split(".").pop()||"").toLowerCase(),fallbackMime={jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",webp:"image/webp",gif:"image/gif",heic:"image/heic",heif:"image/heif",avif:"image/avif",tif:"image/tiff",tiff:"image/tiff",bmp:"image/bmp"}[extension],mime=file.type?.startsWith("image/")?file.type:fallbackMime;
   if(!mime||mime==="image/svg+xml")throw new Error("Choisissez un fichier photo valide.");
@@ -977,7 +994,7 @@ async function compressImageFile(file,maxSide=1200,quality=.78){
         canvas.width=w;canvas.height=h;ctx.drawImage(img,0,0,w,h);
         const data=canvas.toDataURL("image/jpeg",quality);
         if(!data.startsWith("data:image/jpeg;base64,"))throw new Error("Compression JPEG impossible.");
-        if(mediaBytes(data)<=1024*1024)return resolve(data);
+        if(mediaBytes(data)<=320*1024)return resolve(data);
         quality=Math.max(.5,quality-.08);w=Math.max(1,Math.round(w*.8));h=Math.max(1,Math.round(h*.8));
       }
       reject(new Error("L’image reste trop volumineuse après compression. Choisissez une image plus petite."));
@@ -1465,8 +1482,13 @@ $("#newSaleBtn").onclick=()=>openSale();$("#newSaleBtn2").onclick=()=>openSale()
 };$("#addShopBtn").onclick=()=>openModal("shopModal");$("#addSellerBtn").onclick=()=>{renderSellerChecks();openModal("sellerModal")};
 
 function saleProducts(){const oldIds=new Set((db.sales.find(s=>s.id===editingSaleId)?.items||[]).map(i=>i.productId));return db.products.filter(p=>selectedShopIds().includes(p.shopId)&&(p.stock>0||oldIds.has(p.id)))}
+function renderSaleProductPicker(){
+  const selected=$("#saleProduct").value;
+  $("#saleProductPicker").innerHTML=saleProducts().map(p=>`<button type="button" class="saleChoice ${p.id===selected?"active":""}" onclick="selectSaleProduct('${p.id}')">${p.photo?`<img class="thumb zoomable" src="${esc(p.photo)}" alt="${esc(p.name)}" onclick="event.stopPropagation();openProductImage('${p.id}')">`:`<span class="thumb">📦</span>`}<span class="saleChoiceInfo"><b>${esc(p.name)}</b><small>${esc(p.details||p.category||"Sans description")}</small><small>${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</small></span></button>`).join("")||`<div class="muted">Aucun article disponible.</div>`
+}
+window.selectSaleProduct=id=>{$("#saleProduct").value=id;renderSaleProductPicker();updateSaleTotal()};
 function renderSaleDraft(){
-  $("#saleItemsEditor").innerHTML=saleDraftItems.map(i=>`<div class="saleDraftRow"><div><b>${esc(i.name)}</b><br><span class="tiny">${i.qty} × ${fmt(i.sell)} = ${fmt(i.qty*i.sell)}</span></div><button type="button" class="btn danger small" onclick="removeSaleDraftItem('${i.productId}')">Retirer</button></div>`).join("")||`<div class="muted">Ajoutez un ou plusieurs articles.</div>`;
+  $("#saleItemsEditor").innerHTML=saleDraftItems.map(i=>`<div class="saleDraftRow">${i.photo?`<img class="thumb zoomable" src="${esc(i.photo)}" alt="${esc(i.name)}" onclick="openProductImage('${i.productId}')">`:`<div class="thumb">📦</div>`}<div><b>${esc(i.name)}</b><br><span class="tiny">${i.qty} × ${fmt(i.sell)} = ${fmt(i.qty*i.sell)}</span></div><button type="button" class="btn danger small" onclick="removeSaleDraftItem('${i.productId}')">Retirer</button></div>`).join("")||`<div class="muted">Ajoutez un ou plusieurs articles.</div>`;
   updateSaleTotal()
 }
 function addSelectedSaleItem(silent=false){
@@ -1484,7 +1506,8 @@ window.removeSaleDraftItem=id=>{saleDraftItems=saleDraftItems.filter(i=>i.produc
 function openSale(id=null){
   editingSaleId=id;const s=id?db.sales.find(x=>x.id===id):null;saleDraftItems=clone(s?.items||[]);
   $("#saleProduct").innerHTML=saleProducts().map(p=>`<option value="${p.id}">${esc(p.name)} · ${fmt(p.sell)} · ${fmt(usdToCdf(p.sell),"CDF")} · stock ${p.stock}</option>`).join("");
-  $("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";$("#buyerName").value=s?.buyerName||"";$("#buyerPhone").value=s?.buyerPhone||"";$("#saleQty").value=1;$("#saleCurrency").value=s?.currency||"USD";$("#salePaymentMethod").value=s?.paymentMethod||"Espèces";$("#salePaymentRef").value=s?.paymentRef||"";$("#salePaid").value=s?.paidTotal||"";renderSaleDraft();openModal("saleModal")
+  if(s?.items?.[0])$("#saleProduct").value=s.items[0].productId;
+  $("#saleModalTitle").textContent=id?"Corriger la vente":"Nouvelle vente";$("#buyerName").value=s?.buyerName||"";$("#buyerPhone").value=s?.buyerPhone||"";$("#saleQty").value=1;$("#saleCurrency").value=s?.currency||"USD";$("#salePaymentMethod").value=s?.paymentMethod||"Espèces";$("#salePaymentRef").value=s?.paymentRef||"";$("#salePaid").value=s?.paidTotal||"";renderSaleProductPicker();renderSaleDraft();openModal("saleModal")
 }
 function updateSaleTotal(){
   const p=db.products.find(x=>x.id===$("#saleProduct").value),previewQty=Math.max(1,Number($("#saleQty").value)||1),items=saleDraftItems.length?saleDraftItems:p?[{...p,qty:previewQty}]:[],usd=items.reduce((n,i)=>n+i.sell*i.qty,0),profit=items.reduce((n,i)=>n+(i.sell-(Number(i.buy)||0))*i.qty,0),c=$("#saleCurrency").value;
@@ -1492,7 +1515,7 @@ function updateSaleTotal(){
   $("#saleTotalUsd").value=fmt(usd);$("#saleTotalCdf").value=fmt(usdToCdf(usd),"CDF");$("#saleProfitPreview").value=`${fmt(profit)} / ${fmt(usdToCdf(profit),"CDF")}`;
   if(!editingSaleId)$("#salePaid").value=c==="USD"?usd.toFixed(2):Math.round(usdToCdf(usd))
 }
-$("#addSaleItemBtn").onclick=()=>addSelectedSaleItem();$("#saleProduct").onchange=updateSaleTotal;$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
+$("#addSaleItemBtn").onclick=()=>addSelectedSaleItem();$("#saleProduct").onchange=()=>{renderSaleProductPicker();updateSaleTotal()};$("#saleQty").oninput=updateSaleTotal;$("#saleCurrency").onchange=updateSaleTotal;
 $("#saveSaleBtn").onclick=()=>{
   if(!saleDraftItems.length&&!addSelectedSaleItem(true))return alert("Ajoutez au moins un article.");
   const cur=$("#saleCurrency").value,paid=Number($("#salePaid").value),old=editingSaleId?db.sales.find(x=>x.id===editingSaleId):null;
@@ -1554,7 +1577,6 @@ $("#saveProductBtn").onclick=async()=>{
   const f=$("#productPhoto").files[0];
   let photo=null;
   if(f){
-    if(!f.type.startsWith("image/"))return alert("Veuillez choisir une image.");
     photo=await compressImageFile(f);
     photo=await uploadMediaIfNeeded(photo,"products");
   }
@@ -2139,13 +2161,12 @@ if($("#addAdBtn")) $("#addAdBtn").onclick=async()=>{
   const editedId=editingAdId,existing=editedId?db.ads.find(x=>x.id===editedId):null;
   if(editedId&&!existing)return resetAdEditor();
   if(!existing&&!f)return alert("Choisissez une image publicitaire.");
-  if(f&&!f.type.startsWith("image/"))return alert("Le fichier doit être une image.");
   const btn=$("#addAdBtn");if(btn.disabled)return;
   const epoch=sessionEpoch,text=$("#adTextInput").value.trim();
   const oldText=btn.textContent;btn.disabled=true;btn.textContent="Enregistrement…";
   try{
-    let image=existing.image;
-    if(f){image=await compressImageFile(f,1400,.78);image=await uploadMediaIfNeeded(image,"ads")}
+    let image=existing?.image||"";
+    if(f){image=await compressImageFile(f,1200,.74);image=await uploadMediaIfNeeded(image,"ads")}
     if(epoch!==sessionEpoch||editedId!==editingAdId)throw new Error("La session ou la publicité a changé pendant l’envoi.");
     if(existing){
       existing.image=image;existing.text=text;existing.updatedAt=new Date().toISOString();

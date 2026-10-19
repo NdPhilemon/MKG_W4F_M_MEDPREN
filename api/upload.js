@@ -1,7 +1,7 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 import { authenticate } from "./sync.js";
-import { cloudinaryConfig, decodeImage, uploadCloudinary, MAX_UPLOAD_BODY_BYTES, mediaError } from "../lib/cloudinary.js";
+import { cloudinaryConfig, decodeImage, signCloudinaryUpload, uploadCloudinary, MAX_UPLOAD_BODY_BYTES, mediaError } from "../lib/cloudinary.js";
 
 async function reserveUpload(userId) {
   const db=admin.firestore(),now=Date.now();
@@ -37,7 +37,13 @@ export default async function handler(req,res) {
     const permissions=identity.user.permissions||[];
     const allowed=identity.role==='admin'||(folder==='products'&&(permissions.includes('products.edit')||permissions.includes('*')));
     if(!allowed)throw mediaError(403,'UPLOAD_FORBIDDEN','Vous ne disposez pas de l’autorisation d’envoyer cette image.');
-    const image=decodeImage(body.dataUrl),config=cloudinaryConfig();
+    const config=cloudinaryConfig();
+    if(body.action==='sign'){
+      const signed=signCloudinaryUpload(folder,identity.user.id,body.uploadId,config);
+      await reserveUpload(identity.user.id);
+      return res.status(200).json(signed)
+    }
+    const image=decodeImage(body.dataUrl);
     await reserveUpload(identity.user.id);
     return res.status(200).json(await uploadCloudinary(image,folder,identity.user.id,config));
   } catch(e) {

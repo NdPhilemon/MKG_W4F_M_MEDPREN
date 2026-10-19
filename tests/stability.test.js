@@ -31,8 +31,15 @@ const {default:health}=await import('../api/health.js');
 const {default:upload}=await import('../api/upload.js');
 const {decodeImage}=await import('../lib/cloudinary.js');
 const {signSession}=await import('../lib/session.js');
+let cloudinaryStatus=200;
 async function request(url='/api/sync',options={}){
   const parsed=new URL(url,'https://app.test'),req={method:options.method||'GET',headers:options.headers||{},query:Object.fromEntries(parsed.searchParams),body:options.body};
+  if(parsed.hostname==='api.cloudinary.com'){
+    if(cloudinaryStatus!==200)return Response.json({error:{message:'simulated'}},{status:cloudinaryStatus});
+    const publicId=options.body.get('public_id');
+    assert.ok(options.body.get('signature'));assert.ok(options.body.get('api_key'));
+    return Response.json({secure_url:`https://res.cloudinary.com/test-cloud/image/upload/v1/${publicId}.jpg`,public_id:publicId,width:20,height:10,bytes:4});
+  }
   let status=200,data;const headers={};
   const res={setHeader(key,value){headers[String(key).toLowerCase()]=String(value)},status(s){status=s;return this},end(value){data=JSON.parse(value)},json(value){data=value;return this}};
   await (parsed.pathname==='/api/health'?health:parsed.pathname==='/api/upload'?upload:handler)(req,res);
@@ -60,7 +67,7 @@ function root(){return documents.get('mmedpren/global')}
 function product(id='p-one'){return {id,name:'Article',category:'Divers',shopId:'main',stock:10,buy:2,sell:5,photo:'',visibleToVisitors:true}}
 const jpegData='data:image/jpeg;base64,/9j/AA==';
 function mockCloudinary(status=200){
-  const previous=globalThis.fetch;
+  const previous=globalThis.fetch,previousStatus=cloudinaryStatus;cloudinaryStatus=status;
   globalThis.fetch=async(url,options)=>{
     assert.match(String(url),/^https:\/\/api\.cloudinary\.com\/v1_1\/test-cloud\/image\/upload$/);
     if(status!==200)return new Response(JSON.stringify({error:{message:'simulated'}}),{status,headers:{'content-type':'application/json'}});
@@ -68,7 +75,7 @@ function mockCloudinary(status=200){
     assert.ok(options.body.get('signature'));assert.equal(options.body.get('api_key'),'test-api-key');
     return Response.json({secure_url:`https://res.cloudinary.com/test-cloud/image/upload/v1/${publicId}.jpg`,public_id:publicId,width:20,height:10,bytes:4});
   };
-  return ()=>globalThis.fetch=previous;
+  return ()=>{globalThis.fetch=previous;cloudinaryStatus=previousStatus};
 }
 
 test('Admin login, refresh, reopened tab, routes, remote session injection and logout',async()=>{
@@ -191,8 +198,10 @@ test('staff sales decrement stock, concurrent sales merge, manager edits and ser
 
 test('multi-product sale uses one receipt and Admin can delete it after cancellation',async()=>{
   documents.clear();const owner=browser();await owner.login();
-  owner.read(`db.products.push(${JSON.stringify(product('p-one'))},${JSON.stringify({...product('p-two'),name:'Deuxième',stock:4,buy:1,sell:3})});queueSync('products.seed');save()`);await owner.read('syncPending({silent:true})');
+  owner.read(`db.products.push(${JSON.stringify({...product('p-one'),photo:'https://res.cloudinary.com/test-cloud/image/upload/p-one.jpg',details:'Premier article'})},${JSON.stringify({...product('p-two'),name:'Deuxième',stock:4,buy:1,sell:3,photo:'https://res.cloudinary.com/test-cloud/image/upload/p-two.jpg',details:'Deuxième article'})});queueSync('products.seed');save()`);await owner.read('syncPending({silent:true})');
   owner.read('openSale()');
+  assert.equal(owner.w.document.querySelectorAll('#saleProductPicker .saleChoice').length,2);assert.equal(owner.w.document.querySelectorAll('#saleProductPicker img.zoomable').length,2);
+  assert.match(owner.w.document.querySelector('#saleProductPicker img').getAttribute('onclick'),/openProductImage/);owner.w.openProductImage('p-one');assert.equal(owner.w.document.querySelector('#imageModal').classList.contains('open'),true);owner.read('closeModals()');
   owner.w.document.querySelector('#saleProduct').value='p-one';owner.w.document.querySelector('#saleQty').value='2';owner.w.document.querySelector('#addSaleItemBtn').onclick();
   owner.w.document.querySelector('#saleProduct').value='p-two';owner.w.document.querySelector('#saleQty').value='1';owner.w.document.querySelector('#addSaleItemBtn').onclick();
   owner.w.document.querySelector('#salePaid').value='13';owner.w.document.querySelector('#saveSaleBtn').onclick();await owner.read('syncPending({silent:true})');
@@ -324,6 +333,17 @@ test('Cloudinary: active advertisement URL is synchronized and visible to visito
     assert.equal(root().ads[0].text,'Promo modifiée');assert.equal(owner.read('editingAdId'),null);
     owner.w.toggleAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads[0].active,false);
     owner.w.deleteAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads.length,0);
+  }finally{restore()}
+});
+
+test('Cloudinary: a new advertising image is uploaded without an existing ad',async()=>{
+  documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
+  try{
+    owner.read(`compressImageFile=async()=>${JSON.stringify(jpegData)}`);
+    Object.defineProperty(owner.w.document.querySelector('#adImageInput'),'files',{value:[{name:'promotion.jpg',type:'image/jpeg',size:4}],configurable:true});
+    owner.w.document.querySelector('#adTextInput').value='Nouvelle promotion';
+    await owner.w.document.querySelector('#addAdBtn').onclick();
+    assert.equal(root().ads.length,1);assert.equal(root().ads[0].text,'Nouvelle promotion');assert.match(root().ads[0].image,/^https:\/\/res\.cloudinary\.com/);
   }finally{restore()}
 });
 
