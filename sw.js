@@ -1,4 +1,4 @@
-const CACHE="mmedpren-v38-image-upload-fix";
+const CACHE="mmedpren-v39-upload-push-fix";
 const CORE=["./index.html","./sync-core.js","./logo.png","./manifest.webmanifest"];
 self.addEventListener("install",event=>{
   event.waitUntil((async()=>{
@@ -31,4 +31,12 @@ self.addEventListener("fetch",event=>{
       return await cache.match(key)||new Response("Application indisponible hors connexion",{status:503});
     }
   })());
+});
+self.addEventListener("push",event=>{
+  let data={};try{data=event.data?.json()||{}}catch{}
+  event.waitUntil(self.registration.showNotification(data.title||"M'MEDPREN",{body:data.body||"Nouvelle activité",icon:"./logo.png",badge:"./logo.png",tag:data.tag||"mmedpren",data:{url:data.url||"/#home"}}));
+});
+self.addEventListener("notificationclick",event=>{
+  event.notification.close();
+  event.waitUntil((async()=>{const target=new URL(event.notification.data?.url||"/#home",self.location.origin).href,windows=await self.clients.matchAll({type:"window",includeUncontrolled:true}),open=windows[0];if(open){await open.focus();open.navigate(target)}else await self.clients.openWindow(target)})());
 });

@@ -29,6 +29,7 @@ Object.defineProperty(admin,'firestore',{value:()=>fakeDb});
 const {default:handler}=await import('../api/sync.js');
 const {default:health}=await import('../api/health.js');
 const {default:upload}=await import('../api/upload.js');
+const {default:pushApi}=await import('../api/push.js');
 const {decodeImage}=await import('../lib/cloudinary.js');
 const {signSession}=await import('../lib/session.js');
 let cloudinaryStatus=200;
@@ -42,7 +43,7 @@ async function request(url='/api/sync',options={}){
   }
   let status=200,data;const headers={};
   const res={setHeader(key,value){headers[String(key).toLowerCase()]=String(value)},status(s){status=s;return this},end(value){data=JSON.parse(value)},json(value){data=value;return this}};
-  await (parsed.pathname==='/api/health'?health:parsed.pathname==='/api/upload'?upload:handler)(req,res);
+  await (parsed.pathname==='/api/health'?health:parsed.pathname==='/api/upload'?upload:parsed.pathname==='/api/push'?pushApi:handler)(req,res);
   return {ok:status>=200&&status<300,status,headers,json:async()=>data,data};
 }
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
@@ -278,8 +279,8 @@ test('service worker update, API bypass, offline fallback and old cache cleanup'
   const handlers={},stores=new Map([['mmedpren-v32',new Map()],['mmedpren-v33',new Map()],['mmedpren-v34-cloudinary',new Map()],['mmedpren-v35-cloudinary-direct',new Map()],['unrelated-cache',new Map()]]);
   const key=v=>typeof v==='string'?v:v.url;
   const caches={async keys(){return [...stores.keys()]},async delete(k){return stores.delete(k)},async open(k){if(!stores.has(k))stores.set(k,new Map());const store=stores.get(k);return {async addAll(){},async put(k,v){store.set(key(k),v)},async match(k){return store.get(key(k))}}}};
-  let network='new deployment',claimed=false,skipped=false;
-  const context={URL,Request:class {constructor(url,options){this.url=url;this.options=options}},Response,caches,fetch:async()=>{if(network===null)throw new Error('offline');return new Response(network)},self:{location:{origin:'https://app.test',href:'https://app.test/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>skipped=true,clients:{claim:async()=>claimed=true}}};
+  let network='new deployment',claimed=false,skipped=false,shown=null,opened=null;
+  const context={URL,Request:class {constructor(url,options){this.url=url;this.options=options}},Response,caches,fetch:async()=>{if(network===null)throw new Error('offline');return new Response(network)},self:{location:{origin:'https://app.test',href:'https://app.test/sw.js'},addEventListener:(name,fn)=>handlers[name]=fn,skipWaiting:async()=>skipped=true,registration:{showNotification:async(title,options)=>shown={title,options}},clients:{claim:async()=>claimed=true,matchAll:async()=>[],openWindow:async url=>opened=url}}};
   vm.runInNewContext(fs.readFileSync(new URL('../sw.js',import.meta.url),'utf8'),context);
   let work;handlers.install({waitUntil:p=>work=p});await work;assert.equal(skipped,true);
   handlers.activate({waitUntil:p=>work=p});await work;assert.equal(claimed,true);assert.ok(stores.has('unrelated-cache'));assert.ok(!stores.has('mmedpren-v32'));assert.ok(!stores.has('mmedpren-v33'));assert.ok(!stores.has('mmedpren-v34-cloudinary'));assert.ok(!stores.has('mmedpren-v35-cloudinary-direct'));
@@ -287,6 +288,8 @@ test('service worker update, API bypass, offline fallback and old cache cleanup'
   assert.equal(await (await fetchEvent('/')).text(),'new deployment');network=null;
   assert.equal(await (await fetchEvent('/index.html')).text(),'new deployment');
   await assert.rejects(fetchEvent('/api/sync','cors'),/offline/);
+  handlers.push({data:{json:()=>({title:'Nouvelle vente',body:'Reçu créé',url:'/#sales',tag:'sale-1'})},waitUntil:p=>work=p});await work;assert.equal(shown.title,'Nouvelle vente');assert.equal(shown.options.body,'Reçu créé');
+  handlers.notificationclick({notification:{data:shown.options.data,close(){}},waitUntil:p=>work=p});await work;assert.equal(opened,'https://app.test/#sales');
 });
 
 test('Cloudinary: authenticated Admin upload returns an optimized HTTPS URL',async()=>{
@@ -320,6 +323,16 @@ test('Cloudinary: product URL reaches Firestore, visitor, refresh and second dev
   }finally{restore()}
 });
 
+test('Cloudinary: editing an existing product with a new photo completes end to end',async()=>{
+  documents.clear();const owner=browser();await owner.login();owner.read(`db.products.push(${JSON.stringify(product())});queueSync('product.create');save()`);await owner.read('syncPending({silent:true})');const restore=mockCloudinary();
+  try{
+    owner.read(`compressImageFile=async()=>${JSON.stringify(jpegData)}`);owner.w.editProduct('p-one');
+    Object.defineProperty(owner.w.document.querySelector('#productPhoto'),'files',{value:[{name:'article.jpg',type:'image/jpeg',size:4}],configurable:true});
+    await owner.w.document.querySelector('#saveProductBtn').onclick();
+    assert.match(root().products[0].photo,/^https:\/\/res\.cloudinary\.com/);assert.equal(owner.errors.some(e=>/signal timed out|n'a pas pu être publié/i.test(e)),false);
+  }finally{restore()}
+});
+
 test('Cloudinary: active advertisement URL is synchronized and visible to visitors',async()=>{
   documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
   try{
@@ -334,6 +347,22 @@ test('Cloudinary: active advertisement URL is synchronized and visible to visito
     owner.w.toggleAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads[0].active,false);
     owner.w.deleteAd('ad-cloud');await owner.read('syncPending({silent:true})');assert.equal(root().ads.length,0);
   }finally{restore()}
+});
+
+test('signed upload authorization is immediate and does not wait for Firestore',async()=>{
+  documents.clear();const owner=browser();await owner.login();const legacyPayload=Buffer.from(JSON.stringify({sub:owner.read('db.currentUserId'),exp:Date.now()+60000})).toString('base64url'),legacy=`${legacyPayload}.${crypto.createHmac('sha256',process.env.SESSION_SECRET).update(legacyPayload).digest('base64url')}`;
+  owner.read(`db.syncAuth.token=${JSON.stringify(legacy)}`);await owner.read('pullRemote({silent:true})');const token=owner.read('db.syncAuth.token');assert.equal(JSON.parse(Buffer.from(token.split('.')[0],'base64url')).role,'admin');documents.delete('mmedpren/global');
+  const result=await request('/api/upload',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({action:'sign',folder:'products',uploadId:'00000000-0000-4000-8000-000000000009'})});
+  assert.equal(result.status,200);assert.match(result.data.uploadUrl,/^https:\/\/api\.cloudinary\.com/);assert.ok(result.data.signature);
+});
+
+test('notification panel closes outside and Web Push subscription is stored',async()=>{
+  documents.clear();const owner=browser();await owner.login();owner.w.document.querySelector('#bellBtn').click();assert.equal(owner.w.document.querySelector('#notifPanel').classList.contains('open'),true);
+  owner.w.document.body.click();assert.equal(owner.w.document.querySelector('#notifPanel').classList.contains('open'),false);
+  const key=await request('/api/push');assert.equal(key.status,200);assert.match(key.data.publicKey,/^[A-Za-z0-9_-]{80,100}$/);
+  const token=owner.read('db.syncAuth.token'),subscription={endpoint:'https://push.example.test/device-one',keys:{p256dh:'test-p256dh',auth:'test-auth'}};
+  const saved=await request('/api/push',{method:'POST',headers:{'x-sync-token':token},body:JSON.stringify({action:'subscribe',subscription})});assert.equal(saved.status,200);
+  assert.ok([...documents.keys()].some(k=>k.startsWith('mmedpren_push_subscriptions/')));
 });
 
 test('Cloudinary: a new advertising image is uploaded without an existing ad',async()=>{

@@ -2,10 +2,13 @@ import admin from "firebase-admin";
 import crypto from "node:crypto";
 import {initFirebase} from "./firebase-init.js";
 import {signSession,verifySessionToken,sameSecret} from "../lib/session.js";
+import {broadcastPush} from "../lib/push.js";
+import {waitUntil} from "@vercel/functions";
 import "../sync-core.js";
 const ADMIN_EMAIL=(process.env.ADMIN_EMAIL||"").trim().toLowerCase();
 function refs(){initFirebase();const db=admin.firestore();return {db,ROOT:db.collection("mmedpren").doc("global"),ORDERS:db.collection("mmedpren_orders")}}
 const arr=v=>Array.isArray(v)?v:[];
+async function schedulePush(payload){if(!payload)return;const task=broadcastPush(payload).catch(e=>console.error('PUSH_BROADCAST_ERROR',{code:e.code||'PUSH_ERROR'}));try{waitUntil(task)}catch{await task}}
 function send(res,s,p){res.status(s);res.setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/json; charset=utf-8");res.end(JSON.stringify(p))}
 function cleanUser(u){if(!u)return null;const {password,...r}=u;return r}
 function primaryAdmin(){
@@ -107,7 +110,7 @@ async function stateFor(a,sid){
   if(!a)return {revision:r.revision,state:{rate:r.rate,mainCurrency:r.mainCurrency,shopSettings:r.shopSettings,shops:r.shops,
     products:arr(r.products).filter(p=>p.visibleToVisitors!==false&&Number(p.stock)>0).map(publicProduct),
     ads:arr(r.ads).filter(x=>x.active!==false),orders:orders.map(publicOrder)}};
-  return {revision:r.revision,state:{rate:r.rate,mainCurrency:r.mainCurrency,hideMoney:r.hideMoney,shopSettings:r.shopSettings,
+  return {revision:r.revision,...(a?{sessionToken:signSession(a.user)}:{}),state:{rate:r.rate,mainCurrency:r.mainCurrency,hideMoney:r.hideMoney,shopSettings:r.shopSettings,
     adminProfile:a.role==='admin'?r.adminProfile:{},shops:r.shops.filter(s=>inShop(a,s.id)),
     users:a.role==='admin'?r.users.map(cleanUser):[{...cleanUser(a.user),accessCode:null}],
     products:arr(r.products).filter(p=>inShop(a,p.shopId)).map(p=>privateProduct(p,a)),ads:arr(r.ads),
@@ -189,6 +192,7 @@ const safeId=id=>typeof id==='string'&&/^[\w-]{1,150}$/.test(id);
 function orderRow(o){return {visitorSessionId:o.visitorSessionId,status:o.status,claimedById:o.claimedById||null,claimedByName:o.claimedByName||null,updatedAt:o.updatedAt,payload:o}}
 async function syncPrivate(body,token){
   const sub=verifySessionToken(token).sub,{db,ROOT,ORDERS}=refs();
+  let pushPayload=null;
   if(!safeId(body.requestId))throw error(400,'Identifiant de requête requis');
   const receipt=db.collection('mmedpren_sync_receipts').doc(`${sub}-${body.requestId}`);
   await db.runTransaction(async t=>{
@@ -201,6 +205,8 @@ async function syncPrivate(body,token){
       changes=MkgSync.diff({...current,orders:[]},body.state||{}).filter(c=>c.key!=='orders');
     }
     if(changes.length>150)throw error(413,'Trop de modifications dans un seul envoi');
+    const addedNotification=changes.find(c=>c.key==='notifications'&&!c.before&&c.after);
+    if(addedNotification)pushPayload={title:String(addedNotification.after.title||"M'MEDPREN").slice(0,120),body:String(addedNotification.after.body||'').slice(0,500),url:'/#home',tag:addedNotification.id};
     // Legacy rows may still contain Base64 in `before`; only the new value must be URL-only.
     for(const change of changes)validateMedia(change?.after);
     validateChanges(changes,a,current);
@@ -223,10 +229,11 @@ async function syncPrivate(body,token){
     next.revision=Number(current.revision||0)+1;next.updatedAt=new Date().toISOString();
     t.set(ROOT,next);t.set(receipt,{createdAt:new Date(),revision:next.revision});
   });
-  return stateFor(await authenticate(token));
+  const state=await stateFor(await authenticate(token));await schedulePush(pushPayload);return state;
 }
 async function syncPublic(body){
   const sid=body.visitorSessionId,{db,ROOT,ORDERS}=refs();
+  let pushPayload=null;
   if(!safeId(sid)||!Array.isArray(body.orders)||body.orders.length>50)throw error(400,'Session ou commandes invalides');
   await db.runTransaction(async t=>{
     const rootSnap=await t.get(ROOT),root=normalizeRoot(rootSnap.data()),writes=[];
@@ -241,6 +248,7 @@ async function syncPublic(body){
           return {productId:p.id,name:p.name,qty:i.qty,sell:p.sell,buy:p.buy};});
         if(!items.length)throw error(400,'Commande vide');
         o={id:incoming.id,code:`CMD-${incoming.id.slice(-8).toUpperCase()}`,visitorSessionId:sid,visitorName:String(incoming.visitorName||'').slice(0,120),whatsapp:String(incoming.whatsapp||'').slice(0,40),shopId:'main',items,status:'waiting',claimedById:null,claimedByName:null,createdAt:new Date().toISOString(),messages:[]};
+        pushPayload={title:'Nouvelle commande',body:`${o.visitorName||'Un visiteur'} a envoyé ${o.code}.`,url:'/#orders',tag:o.id};
       }
       const messages=new Map(arr(o.messages).map(m=>[m.id,m]));
       if(!['completed','cancelled'].includes(o.status))for(const m of arr(incoming.messages))if(safeId(m.id)&&!messages.has(m.id))messages.set(m.id,{id:m.id,senderType:'visitor',senderId:sid,senderName:o.visitorName||'Visiteur',text:String(m.text||'').slice(0,4000),at:new Date().toISOString()});
@@ -249,7 +257,8 @@ async function syncPublic(body){
     }
     for(const [ref,o] of writes)t.set(ref,orderRow(o));
     if(writes.length)t.set(ROOT,{...root,revision:Number(root.revision||0)+1,updatedAt:new Date().toISOString()});
-  });return stateFor(null,sid);
+  });
+  const state=await stateFor(null,sid);await schedulePush(pushPayload);return state;
 }
 async function claimOrder(body,token){
   const sub=verifySessionToken(token).sub,{db,ROOT,ORDERS}=refs();

@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 import { authenticate } from "./sync.js";
+import { verifySessionToken } from "../lib/session.js";
 import { cloudinaryConfig, decodeImage, signCloudinaryUpload, uploadCloudinary, MAX_UPLOAD_BODY_BYTES, mediaError } from "../lib/cloudinary.js";
 
 async function reserveUpload(userId) {
@@ -26,7 +27,6 @@ export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
   try {
     if(req.method!=='POST'){res.setHeader('Allow','POST');throw mediaError(405,'METHOD_NOT_ALLOWED','Méthode non autorisée');}
-    const identity=await authenticate(req.headers['x-sync-token']);
     if(Number(req.headers['content-length']||0)>MAX_UPLOAD_BODY_BYTES)throw mediaError(413,'IMAGE_TOO_LARGE','Image trop volumineuse. Compressez-la avant envoi.');
     const serialized=typeof req.body==='string'?req.body:JSON.stringify(req.body||{});
     if(Buffer.byteLength(serialized,'utf8')>MAX_UPLOAD_BODY_BYTES)throw mediaError(413,'IMAGE_TOO_LARGE','Image trop volumineuse. Compressez-la avant envoi.');
@@ -34,15 +34,18 @@ export default async function handler(req,res) {
     if(!body||typeof body!=='object'||Array.isArray(body))throw mediaError(400,'INVALID_BODY','Requête JSON invalide.');
     const folder=body.folder??'products';
     if(!['products','ads'].includes(folder))throw mediaError(400,'INVALID_FOLDER','Destination image invalide.');
+    const session=verifySessionToken(req.headers['x-sync-token']);
+    if(body.action==='sign'&&session.role){
+      const permissions=Array.isArray(session.permissions)?session.permissions:[],allowed=session.role==='admin'||(folder==='products'&&(permissions.includes('products.edit')||permissions.includes('*')));
+      if(!allowed)throw mediaError(403,'UPLOAD_FORBIDDEN','Vous ne disposez pas de l’autorisation d’envoyer cette image.');
+      return res.status(200).json(signCloudinaryUpload(folder,session.sub,body.uploadId,cloudinaryConfig()))
+    }
+    const identity=await authenticate(req.headers['x-sync-token']);
     const permissions=identity.user.permissions||[];
     const allowed=identity.role==='admin'||(folder==='products'&&(permissions.includes('products.edit')||permissions.includes('*')));
     if(!allowed)throw mediaError(403,'UPLOAD_FORBIDDEN','Vous ne disposez pas de l’autorisation d’envoyer cette image.');
     const config=cloudinaryConfig();
-    if(body.action==='sign'){
-      const signed=signCloudinaryUpload(folder,identity.user.id,body.uploadId,config);
-      await reserveUpload(identity.user.id);
-      return res.status(200).json(signed)
-    }
+    if(body.action==='sign')return res.status(200).json(signCloudinaryUpload(folder,identity.user.id,body.uploadId,config));
     const image=decodeImage(body.dataUrl);
     await reserveUpload(identity.user.id);
     return res.status(200).json(await uploadCloudinary(image,folder,identity.user.id,config));
