@@ -855,9 +855,9 @@ async function uploadMediaIfNeeded(dataUrl,folder="products"){
   if(!signed.ok||endpoint?.protocol!=="https:"||endpoint.hostname!=="api.cloudinary.com")throw new Error("Le stockage d’images n’a pas pu être préparé.");
   const form=new FormData();Object.entries(signed.params||{}).forEach(([key,value])=>form.set(key,value));
   form.set("api_key",signed.apiKey);form.set("signature",signed.signature);form.set("file",dataUrlBlob(dataUrl),"image");
-  let response,j;
-  try{response=await fetch(endpoint.href,{method:"POST",body:form,signal:AbortSignal.timeout(12000)});j=await response.json().catch(()=>({}))}
-  catch(e){throw new Error(e.name==="TimeoutError"||e.name==="AbortError"?"L’envoi de l’image a dépassé le délai. Vérifiez la connexion puis réessayez.":"Cloudinary est temporairement inaccessible.")}
+  let response,j,lastError;
+  for(let attempt=0;attempt<2;attempt++)try{response=await fetch(endpoint.href,{method:"POST",body:form,signal:AbortSignal.timeout(20000)});j=await response.json().catch(()=>({}));lastError=null;break}catch(e){lastError=e;if(!["TimeoutError","AbortError"].includes(e.name)||attempt)break}
+  if(lastError)throw new Error(["TimeoutError","AbortError"].includes(lastError.name)?"L’envoi de l’image a dépassé le délai malgré une nouvelle tentative. Vérifiez la connexion puis réessayez.":"Cloudinary est temporairement inaccessible.");
   if(!response.ok)throw Object.assign(new Error(response.status===413?"Image trop volumineuse.":response.status===429?"Limite d’envoi atteinte. Réessayez plus tard.":"Cloudinary a refusé cette image."),{status:response.status});
   if(epoch!==sessionEpoch)throw new Error("La session a changé pendant l’envoi de l’image.");
   let url;try{url=new URL(j.secure_url)}catch{}

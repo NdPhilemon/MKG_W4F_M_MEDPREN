@@ -333,6 +333,14 @@ test('Cloudinary: editing an existing product with a new photo completes end to 
   }finally{restore()}
 });
 
+test('Cloudinary: a lost upload response is retried once with the same signed image',async()=>{
+  documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();let cloudAttempts=0;
+  try{
+    owner.w.fetch=async(url,options)=>{if(new URL(url,'https://app.test').hostname==='api.cloudinary.com'&&++cloudAttempts===1)throw new owner.w.DOMException('network timeout','TimeoutError');return request(url,options)};
+    const url=await owner.read(`uploadMediaIfNeeded(${JSON.stringify(jpegData)},"products")`);assert.match(url,/^https:\/\/res\.cloudinary\.com/);assert.equal(cloudAttempts,2);
+  }finally{restore()}
+});
+
 test('Cloudinary: active advertisement URL is synchronized and visible to visitors',async()=>{
   documents.clear();const owner=browser();await owner.login();const restore=mockCloudinary();
   try{
